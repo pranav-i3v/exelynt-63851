@@ -45,7 +45,7 @@ class AwsSecretsManagerJwtKeyProviderTest {
 
     @BeforeEach
     void setUp() {
-        keyPair = RsaKeys.generateKeyPair();
+        keyPair = TestRsaKeys.generateKeyPair();
     }
 
     @Test
@@ -140,7 +140,7 @@ class AwsSecretsManagerJwtKeyProviderTest {
     @Test
     @DisplayName("a rotated secret is picked up and the previous public key still verifies")
     void picksUpRotationAndKeepsPreviousKey() {
-        KeyPair rotated = RsaKeys.generateKeyPair();
+        KeyPair rotated = TestRsaKeys.generateKeyPair();
         when(secretsManagerClient.getSecretValue(any(GetSecretValueRequest.class)))
                 .thenReturn(GetSecretValueResponse.builder().secretString(privateKeyPem()).build())
                 .thenReturn(GetSecretValueResponse.builder()
@@ -163,7 +163,7 @@ class AwsSecretsManagerJwtKeyProviderTest {
     @Test
     @DisplayName("an unknown key id triggers a re-read, in case the key rotated elsewhere")
     void unknownKeyIdTriggersReload() {
-        KeyPair rotated = RsaKeys.generateKeyPair();
+        KeyPair rotated = TestRsaKeys.generateKeyPair();
         when(secretsManagerClient.getSecretValue(any(GetSecretValueRequest.class)))
                 .thenReturn(GetSecretValueResponse.builder().secretString(privateKeyPem()).build())
                 .thenReturn(GetSecretValueResponse.builder()

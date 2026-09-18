@@ -5,8 +5,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.JwtProperties;
+import com.exelynt.booking.security.TestRsaKeys;
 import com.exelynt.booking.security.jwt.service.JwtService;
-import com.exelynt.booking.security.RsaKeys;
 import com.jayway.jsonpath.JsonPath;
 import io.jsonwebtoken.Jwts;
 import java.security.KeyPair;
@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -28,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Import(StubSecretsManagerConfiguration.class)
 abstract class IntegrationTestSupport {
 
     protected static final String ADMIN_USERNAME = "admin";
@@ -46,6 +48,9 @@ abstract class IntegrationTestSupport {
 
     @Autowired
     protected JwtKeyProvider jwtKeyProvider;
+
+    @Autowired
+    protected org.springframework.context.ApplicationContext applicationContext;
 
     protected String adminAccessToken;
     protected String userAccessToken;
@@ -96,7 +101,7 @@ abstract class IntegrationTestSupport {
 
     /** A structurally valid token signed with a different RSA key, under our key id. */
     protected String foreignlySignedAccessToken(String username) {
-        KeyPair attackerKeyPair = RsaKeys.generateKeyPair();
+        KeyPair attackerKeyPair = TestRsaKeys.generateKeyPair();
         return Jwts.builder()
                 .header().keyId(jwtKeyProvider.currentSigningKey().keyId()).and()
                 .issuer(jwtProperties.issuer())
@@ -111,7 +116,7 @@ abstract class IntegrationTestSupport {
 
     /** A token signed with a key the application has never seen, under an unknown key id. */
     protected String unknownKeyIdAccessToken(String username) {
-        KeyPair attackerKeyPair = RsaKeys.generateKeyPair();
+        KeyPair attackerKeyPair = TestRsaKeys.generateKeyPair();
         return Jwts.builder()
                 .header().keyId("a-key-we-never-issued").and()
                 .issuer(jwtProperties.issuer())

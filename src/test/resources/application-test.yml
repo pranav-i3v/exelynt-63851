@@ -1,7 +1,8 @@
 # Throwaway test configuration, layered on top of the main application.yml.
-# Nothing here is a real credential: the JWT secret is a fixed dummy string and
-# the database is in-memory H2. These keys override their ${ENV_VAR} counterparts
-# in application.yml, so tests need no environment variables at all.
+# Nothing here is a credential: the database is in-memory H2 and the signing key
+# is generated per JVM run by the stubbed Secrets Manager client. These keys
+# override their ${ENV_VAR} counterparts in application.yml, so tests need no
+# environment variables and make no AWS call.
 spring:
   datasource:
     url: jdbc:h2:mem:booking;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
@@ -10,18 +11,21 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      # H2 is created from the JPA mapping; the real schema lives in db/<engine>/02_schema.sql.
+      # H2 is created from the JPA mapping; the real schema lives in db/postgresql/02_schema.sql.
       ddl-auto: create-drop
     open-in-view: false
 
 app:
   jwt:
-    # Tests generate an ephemeral RSA key pair in memory: no AWS call, and no key
-    # material of any kind in the repository.
-    key-source: generated
     access-expiry-minutes: 15
     refresh-expiry-days: 7
     issuer: resource-booking-system
+    aws:
+      # The real AWS provider runs; only the SDK client is stubbed, by
+      # StubSecretsManagerConfiguration. No AWS call leaves the JVM.
+      secret-id: test/jwt-signing-key
+      region: eu-west-1
+      refresh-minutes: 0
 
 logging:
   level:

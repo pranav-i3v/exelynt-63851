@@ -5,46 +5,29 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * JWT settings.
  *
- * <p>Tokens are signed with RS256, so the application holds an RSA key pair
- * rather than a shared secret. Where that key pair comes from is decided by
- * {@link KeySource}; in production it is AWS Secrets Manager.</p>
+ * <p>Tokens are signed with RS256. The RSA key pair is held by AWS Secrets
+ * Manager and nowhere else: there is no configuration property, environment
+ * variable or file from which the application will accept key material, and it
+ * never generates a key pair of its own.</p>
  *
  * <p>Everything is validated in the canonical constructor, so a misconfigured
- * key source fails the application at startup instead of at the first login.</p>
+ * secret fails the application at startup instead of at the first login.</p>
  */
 @ConfigurationProperties(prefix = "app.jwt")
 public record JwtProperties(
-        KeySource keySource,
         long accessExpiryMinutes,
         long refreshExpiryDays,
         String issuer,
-        Pem pem,
         Aws aws) {
 
     /** RSA keys below 2048 bits are not accepted. */
     public static final int MIN_KEY_SIZE_BITS = 2048;
 
-    /** Where the RSA key pair is loaded from. */
-    public enum KeySource {
-        /** Production: the key pair is read from AWS Secrets Manager. */
-        AWS_SECRETS_MANAGER,
-        /** Local development: PEM-encoded keys supplied through configuration. */
-        PEM,
-        /** Tests only: an ephemeral key pair generated at startup. */
-        GENERATED
-    }
-
-    /** PEM-encoded key material supplied directly (PKCS#8 private key, X.509 public key). */
-    public record Pem(String privateKey, String publicKey, String keyId) {
-    }
-
-    /** Location of the secret holding the key pair, plus how often to re-read it. */
+    /** Location of the AWS Secrets Manager secret holding the key pair, and how often to re-read it. */
     public record Aws(String secretId, String region, long refreshMinutes) {
     }
 
     public JwtProperties {
-        keySource = keySource == null ? KeySource.AWS_SECRETS_MANAGER : keySource;
-        pem = pem == null ? new Pem(null, null, null) : pem;
         aws = aws == null ? new Aws(null, null, 0L) : aws;
 
         if (accessExpiryMinutes <= 0) {
@@ -56,16 +39,7 @@ public record JwtProperties(
         if (issuer == null || issuer.isBlank()) {
             throw new IllegalStateException("app.jwt.issuer must be configured");
         }
-
-        switch (keySource) {
-            case AWS_SECRETS_MANAGER -> requireConfigured(aws.secretId(), "JWT_SECRET_ID",
-                    "app.jwt.aws.secret-id must name the AWS Secrets Manager secret holding the RSA key pair");
-            case PEM -> requireConfigured(pem.privateKey(), "JWT_PRIVATE_KEY",
-                    "app.jwt.pem.private-key must contain a PKCS#8 PEM private key");
-            case GENERATED -> {
-                // Nothing to configure: the key pair is created in memory at startup.
-            }
-        }
+        requireSecretId(aws.secretId());
     }
 
     public long accessExpirySeconds() {
@@ -76,12 +50,13 @@ public record JwtProperties(
      * Spring's binder leaves an unresolvable {@code ${VAR}} in place rather than
      * failing, so an unset variable would otherwise look like a literal value.
      */
-    private static void requireConfigured(String value, String variableName, String message) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException(message + "; set " + variableName + " (see .env.example)");
+    private static void requireSecretId(String secretId) {
+        if (secretId == null || secretId.isBlank()) {
+            throw new IllegalStateException("app.jwt.aws.secret-id must name the AWS Secrets Manager secret "
+                    + "holding the RSA signing key; set JWT_SECRET_ID (see .env.example)");
         }
-        if (value.startsWith("${") && value.endsWith("}")) {
-            throw new IllegalStateException(variableName + " is not set: the placeholder " + value
+        if (secretId.startsWith("${") && secretId.endsWith("}")) {
+            throw new IllegalStateException("JWT_SECRET_ID is not set: the placeholder " + secretId
                     + " could not be resolved. Export it as an environment variable (see .env.example)");
         }
     }

@@ -1,11 +1,8 @@
 package com.exelynt.booking.config;
 
-import com.exelynt.booking.security.jwt.provider.impl.AwsSecretsManagerJwtKeyProvider;
-import com.exelynt.booking.security.jwt.provider.impl.GeneratedJwtKeyProvider;
-import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.JwtProperties;
-import com.exelynt.booking.security.jwt.provider.impl.PemJwtKeyProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.impl.AwsSecretsManagerJwtKeyProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.regions.Region;
@@ -13,10 +10,12 @@ import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Chooses where the RS256 key pair comes from, based on {@code app.jwt.key-source}.
+ * Wires the one and only source of RS256 key material: AWS Secrets Manager.
  *
- * <p>The AWS client is only created for the {@code aws-secrets-manager} source,
- * so local runs and tests never touch the AWS SDK's credential chain.</p>
+ * <p>There is deliberately no alternative provider. Key material cannot be
+ * supplied through configuration, an environment variable or a file, and the
+ * application never generates a key pair — if the secret cannot be read, it
+ * does not start.</p>
  */
 @Configuration
 public class JwtKeyConfiguration {
@@ -27,7 +26,6 @@ public class JwtKeyConfiguration {
      * come from the default provider chain — an IAM role in production.
      */
     @Bean(destroyMethod = "close")
-    @ConditionalOnProperty(name = "app.jwt.key-source", havingValue = "aws-secrets-manager", matchIfMissing = true)
     public SecretsManagerClient secretsManagerClient(JwtProperties properties) {
         var builder = SecretsManagerClient.builder();
         String region = properties.aws().region();
@@ -38,22 +36,9 @@ public class JwtKeyConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.jwt.key-source", havingValue = "aws-secrets-manager", matchIfMissing = true)
-    public JwtKeyProvider awsSecretsManagerJwtKeyProvider(SecretsManagerClient secretsManagerClient,
-                                                          ObjectMapper objectMapper,
-                                                          JwtProperties properties) {
+    public JwtKeyProvider jwtKeyProvider(SecretsManagerClient secretsManagerClient,
+                                         ObjectMapper objectMapper,
+                                         JwtProperties properties) {
         return new AwsSecretsManagerJwtKeyProvider(secretsManagerClient, objectMapper, properties.aws());
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "app.jwt.key-source", havingValue = "pem")
-    public JwtKeyProvider pemJwtKeyProvider(JwtProperties properties) {
-        return new PemJwtKeyProvider(properties.pem());
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "app.jwt.key-source", havingValue = "generated")
-    public JwtKeyProvider generatedJwtKeyProvider() {
-        return new GeneratedJwtKeyProvider();
     }
 }

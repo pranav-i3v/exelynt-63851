@@ -4,10 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.exelynt.booking.security.JwtProperties.Aws;
-import com.exelynt.booking.security.JwtProperties.KeySource;
-import com.exelynt.booking.security.JwtProperties.Pem;
 import com.exelynt.booking.security.jwt.dto.IssuedAccessToken;
-import com.exelynt.booking.security.jwt.provider.impl.GeneratedJwtKeyProvider;
 import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.jwt.service.JwtService;
 import com.exelynt.booking.user.common.Role;
@@ -34,13 +31,13 @@ class JwtServiceTest {
 
     private static final String ISSUER = "resource-booking-system";
 
-    private GeneratedJwtKeyProvider keyProvider;
+    private TestKeyProvider keyProvider;
     private JwtService jwtService;
     private User user;
 
     @BeforeEach
     void setUp() {
-        keyProvider = new GeneratedJwtKeyProvider();
+        keyProvider = new TestKeyProvider();
         jwtService = new JwtService(keyProvider, properties());
         user = new User("alice", "$2a$10$irrelevant", Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
@@ -82,7 +79,7 @@ class JwtServiceTest {
     @Test
     @DisplayName("a token signed with another RSA key is rejected")
     void rejectsWrongSignature() {
-        GeneratedJwtKeyProvider attacker = new GeneratedJwtKeyProvider();
+        TestKeyProvider attacker = new TestKeyProvider();
         // Same kid as ours, so the key is found - but the signature will not verify.
         String foreign = signed(attacker.currentSigningKey().privateKey(),
                 keyProvider.currentSigningKey().keyId(), ISSUER, Instant.now().plusSeconds(600));
@@ -168,8 +165,7 @@ class JwtServiceTest {
     }
 
     private static JwtProperties properties() {
-        return new JwtProperties(KeySource.GENERATED, 15, 7, ISSUER,
-                new Pem(null, null, null), new Aws(null, null, 0L));
+        return new JwtProperties(15, 7, ISSUER, new Aws("test/jwt-signing-key", "eu-west-1", 0L));
     }
 
     private static String signed(PrivateKey key, String keyId, String issuer, Instant expiresAt) {
@@ -199,7 +195,7 @@ class JwtServiceTest {
         }
 
         private void rotate() {
-            JwtSigningKey next = new GeneratedJwtKeyProvider().currentSigningKey();
+            JwtSigningKey next = new TestKeyProvider().currentSigningKey();
             known.put(next.keyId(), next.publicKey());
             current = next;
         }
@@ -212,6 +208,32 @@ class JwtServiceTest {
         @Override
         public java.util.Optional<java.security.interfaces.RSAPublicKey> verificationKey(String keyId) {
             return java.util.Optional.ofNullable(known.get(keyId));
+        }
+    }
+
+    /** Stands in for the AWS-backed provider; key handling itself is tested in its own suite. */
+    private static final class TestKeyProvider implements JwtKeyProvider {
+
+        private final JwtSigningKey signingKey;
+
+        private TestKeyProvider() {
+            java.security.KeyPair keyPair = TestRsaKeys.generateKeyPair();
+            java.security.interfaces.RSAPublicKey publicKey =
+                    (java.security.interfaces.RSAPublicKey) keyPair.getPublic();
+            this.signingKey = new JwtSigningKey(RsaKeys.fingerprint(publicKey),
+                    (java.security.interfaces.RSAPrivateKey) keyPair.getPrivate(), publicKey);
+        }
+
+        @Override
+        public JwtSigningKey currentSigningKey() {
+            return signingKey;
+        }
+
+        @Override
+        public java.util.Optional<java.security.interfaces.RSAPublicKey> verificationKey(String keyId) {
+            return signingKey.keyId().equals(keyId)
+                    ? java.util.Optional.of(signingKey.publicKey())
+                    : java.util.Optional.empty();
         }
     }
 }

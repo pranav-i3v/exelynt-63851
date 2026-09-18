@@ -48,25 +48,19 @@ server:
 
 app:
   jwt:
-    # Access tokens are signed with RS256. The key pair lives in AWS Secrets
-    # Manager; "pem" (local development) and "generated" (tests) are the other
-    # sources. No key material is ever read from this file.
-    key-source: ${JWT_KEY_SOURCE:aws-secrets-manager}
+    # Access tokens are signed with RS256. The RSA key pair is held by AWS
+    # Secrets Manager and nowhere else: no key material is read from this file,
+    # from an environment variable, or from disk, and none is ever generated.
     access-expiry-minutes: ${JWT_ACCESS_EXPIRY_MINUTES:15}
     refresh-expiry-days: ${JWT_REFRESH_EXPIRY_DAYS:7}
     issuer: resource-booking-system
     aws:
-      # Name or ARN of the secret holding the RSA key pair.
+      # Name or ARN of the secret holding the RSA key pair. Required.
       secret-id: ${JWT_SECRET_ID}
       # Optional: falls back to the standard AWS region chain when unset.
       region: ${AWS_REGION:}
       # 0 disables re-reading; set it to pick up a rotated key without a restart.
       refresh-minutes: ${JWT_KEY_REFRESH_MINUTES:0}
-    pem:
-      # Only used when key-source=pem. Keep real keys in .env, never in git.
-      private-key: ${JWT_PRIVATE_KEY:}
-      public-key: ${JWT_PUBLIC_KEY:}
-      key-id: ${JWT_KEY_ID:}
 
 management:
   endpoints:

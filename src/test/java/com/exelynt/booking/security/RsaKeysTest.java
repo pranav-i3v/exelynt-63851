@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Base64;
@@ -18,7 +17,7 @@ class RsaKeysTest {
 
     @BeforeAll
     static void generate() {
-        keyPair = RsaKeys.generateKeyPair();
+        keyPair = TestRsaKeys.generateKeyPair();
     }
 
     @Test
@@ -62,7 +61,7 @@ class RsaKeysTest {
 
         assertThat(first).hasSize(16);
         assertThat(RsaKeys.fingerprint((RSAPublicKey) keyPair.getPublic())).isEqualTo(first);
-        assertThat(RsaKeys.fingerprint((RSAPublicKey) RsaKeys.generateKeyPair().getPublic())).isNotEqualTo(first);
+        assertThat(RsaKeys.fingerprint((RSAPublicKey) TestRsaKeys.generateKeyPair().getPublic())).isNotEqualTo(first);
     }
 
     @Test
@@ -99,10 +98,8 @@ class RsaKeysTest {
 
     @Test
     @DisplayName("an RSA key below 2048 bits is rejected")
-    void rejectsWeakKey() throws Exception {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(1024);
-        KeyPair weak = generator.generateKeyPair();
+    void rejectsWeakKey() {
+        KeyPair weak = TestRsaKeys.generateKeyPair(1024);
         String pem = pem("PRIVATE KEY", weak.getPrivate().getEncoded());
 
         assertThatThrownBy(() -> RsaKeys.parsePrivateKey(pem))

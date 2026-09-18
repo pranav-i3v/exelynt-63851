@@ -3,8 +3,6 @@ package com.exelynt.booking.security;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPrivateCrtKey;
@@ -19,12 +17,13 @@ import java.util.Base64;
 /**
  * PEM parsing and key derivation for the RS256 signing keys.
  *
- * <p>Plain JCE only: no BouncyCastle, no extra dependency to keep current.</p>
+ * <p>Plain JCE only: no BouncyCastle, no extra dependency to keep current.
+ * There is deliberately no key-generation helper here — the application reads
+ * keys from AWS Secrets Manager and never creates one.</p>
  */
 public final class RsaKeys {
 
     private static final String ALGORITHM = "RSA";
-    private static final int GENERATED_KEY_SIZE_BITS = 2048;
 
     private RsaKeys() {
     }
@@ -84,17 +83,6 @@ public final class RsaKeys {
                     .generatePublic(new RSAPublicKeySpec(crtKey.getModulus(), crtKey.getPublicExponent()));
         } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
             throw new IllegalStateException("The public key could not be derived from the private key", ex);
-        }
-    }
-
-    /** An ephemeral key pair, used by the {@code GENERATED} key source. */
-    public static KeyPair generateKeyPair() {
-        try {
-            KeyPairGenerator generator = KeyPairGenerator.getInstance(ALGORITHM);
-            generator.initialize(GENERATED_KEY_SIZE_BITS);
-            return generator.generateKeyPair();
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("RSA is required but unavailable in this JVM", ex);
         }
     }
 
