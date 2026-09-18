@@ -2,8 +2,8 @@ package com.exelynt.booking.resource.service;
 
 import com.exelynt.booking.audit.common.AuditAction;
 import com.exelynt.booking.audit.service.AuditService;
-import com.exelynt.booking.common.exception.ConflictException;
-import com.exelynt.booking.common.exception.NotFoundException;
+import com.exelynt.booking.common.exception.type.ConflictException;
+import com.exelynt.booking.common.exception.type.NotFoundException;
 import com.exelynt.booking.resource.dto.ResourceMapper;
 import com.exelynt.booking.resource.dto.ResourceRequest;
 import com.exelynt.booking.resource.dto.ResourceResponse;

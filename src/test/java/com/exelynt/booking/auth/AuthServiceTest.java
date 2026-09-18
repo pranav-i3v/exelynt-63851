@@ -15,7 +15,7 @@ import com.exelynt.booking.auth.dto.TokenResponse;
 import com.exelynt.booking.auth.entity.RefreshToken;
 import com.exelynt.booking.auth.service.AuthService;
 import com.exelynt.booking.auth.service.RefreshTokenService;
-import com.exelynt.booking.common.exception.UnauthorizedException;
+import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import com.exelynt.booking.security.IssuedAccessToken;
 import com.exelynt.booking.security.JwtService;
 import com.exelynt.booking.security.JwtTokenDetails;

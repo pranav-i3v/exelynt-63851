@@ -9,8 +9,8 @@ import static org.mockito.Mockito.when;
 
 import com.exelynt.booking.audit.common.AuditAction;
 import com.exelynt.booking.audit.service.AuditService;
-import com.exelynt.booking.common.exception.ConflictException;
-import com.exelynt.booking.common.exception.NotFoundException;
+import com.exelynt.booking.common.exception.type.ConflictException;
+import com.exelynt.booking.common.exception.type.NotFoundException;
 import com.exelynt.booking.resource.common.ResourceType;
 import com.exelynt.booking.resource.dto.ResourceRequest;
 import com.exelynt.booking.resource.dto.ResourceResponse;

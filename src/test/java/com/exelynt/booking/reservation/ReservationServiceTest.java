@@ -10,9 +10,9 @@ import static org.mockito.Mockito.when;
 
 import com.exelynt.booking.audit.common.AuditAction;
 import com.exelynt.booking.audit.service.AuditService;
-import com.exelynt.booking.common.exception.BadRequestException;
-import com.exelynt.booking.common.exception.ConflictException;
-import com.exelynt.booking.common.exception.NotFoundException;
+import com.exelynt.booking.common.exception.type.BadRequestException;
+import com.exelynt.booking.common.exception.type.ConflictException;
+import com.exelynt.booking.common.exception.type.NotFoundException;
 import com.exelynt.booking.common.model.PageResponse;
 import com.exelynt.booking.reservation.common.ReservationStatus;
 import com.exelynt.booking.reservation.dto.ReservationCreateRequest;

@@ -1,5 +1,11 @@
-package com.exelynt.booking.common.exception;
+package com.exelynt.booking.common.exception.handler;
 
+import com.exelynt.booking.common.exception.common.ErrorResponse;
+import com.exelynt.booking.common.exception.common.FieldErrorDetail;
+import com.exelynt.booking.common.exception.type.BadRequestException;
+import com.exelynt.booking.common.exception.type.ConflictException;
+import com.exelynt.booking.common.exception.type.NotFoundException;
+import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import com.exelynt.booking.common.logging.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;

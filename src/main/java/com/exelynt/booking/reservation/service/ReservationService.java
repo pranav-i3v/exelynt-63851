@@ -2,8 +2,8 @@ package com.exelynt.booking.reservation.service;
 
 import com.exelynt.booking.audit.common.AuditAction;
 import com.exelynt.booking.audit.service.AuditService;
-import com.exelynt.booking.common.exception.ConflictException;
-import com.exelynt.booking.common.exception.NotFoundException;
+import com.exelynt.booking.common.exception.type.ConflictException;
+import com.exelynt.booking.common.exception.type.NotFoundException;
 import com.exelynt.booking.common.model.PageResponse;
 import com.exelynt.booking.common.web.SortWhitelist;
 import com.exelynt.booking.reservation.repository.ReservationRepository;

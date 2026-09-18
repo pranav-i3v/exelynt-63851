@@ -1,6 +1,6 @@
 package com.exelynt.booking.security;
 
-import com.exelynt.booking.common.exception.UnauthorizedException;
+import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import java.util.Optional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

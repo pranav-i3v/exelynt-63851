@@ -1,4 +1,4 @@
-package com.exelynt.booking.common.exception;
+package com.exelynt.booking.common.exception.type;
 
 /** Maps to HTTP 404. Also used to hide resources the caller may not see. */
 public class NotFoundException extends RuntimeException {

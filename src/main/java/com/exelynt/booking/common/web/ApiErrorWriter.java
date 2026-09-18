@@ -1,6 +1,6 @@
 package com.exelynt.booking.common.web;
 
-import com.exelynt.booking.common.exception.ErrorResponse;
+import com.exelynt.booking.common.exception.common.ErrorResponse;
 import com.exelynt.booking.common.logging.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

@@ -1,6 +1,6 @@
 package com.exelynt.booking.common.web;
 
-import com.exelynt.booking.common.exception.BadRequestException;
+import com.exelynt.booking.common.exception.type.BadRequestException;
 import java.util.Set;
 import org.springframework.data.domain.Sort;
 

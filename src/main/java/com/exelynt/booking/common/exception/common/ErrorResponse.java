@@ -1,4 +1,4 @@
-package com.exelynt.booking.common.exception;
+package com.exelynt.booking.common.exception.common;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;

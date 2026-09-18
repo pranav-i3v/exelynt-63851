@@ -1,6 +1,6 @@
 package com.exelynt.booking.user.service;
 
-import com.exelynt.booking.common.exception.NotFoundException;
+import com.exelynt.booking.common.exception.type.NotFoundException;
 import com.exelynt.booking.user.entity.User;
 import com.exelynt.booking.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
