@@ -1,6 +1,6 @@
 package com.exelynt.booking.reservation.dto;
 
-import com.exelynt.booking.reservation.ReservationStatus;
+import com.exelynt.booking.reservation.common.ReservationStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

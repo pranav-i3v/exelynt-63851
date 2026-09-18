@@ -1,7 +1,7 @@
 package com.exelynt.booking.security;
 
-import com.exelynt.booking.user.Role;
-import com.exelynt.booking.user.User;
+import com.exelynt.booking.user.common.Role;
+import com.exelynt.booking.user.entity.User;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.security.core.GrantedAuthority;

@@ -7,13 +7,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.exelynt.booking.audit.AuditAction;
-import com.exelynt.booking.audit.AuditService;
+import com.exelynt.booking.audit.common.AuditAction;
+import com.exelynt.booking.audit.service.AuditService;
 import com.exelynt.booking.common.exception.ConflictException;
 import com.exelynt.booking.common.exception.NotFoundException;
+import com.exelynt.booking.resource.common.ResourceType;
 import com.exelynt.booking.resource.dto.ResourceRequest;
 import com.exelynt.booking.resource.dto.ResourceResponse;
 import java.util.Optional;
+
+import com.exelynt.booking.resource.entity.Resource;
+import com.exelynt.booking.resource.repository.ResourceRepository;
+import com.exelynt.booking.resource.service.ResourceService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

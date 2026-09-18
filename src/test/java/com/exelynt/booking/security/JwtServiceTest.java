@@ -3,8 +3,8 @@ package com.exelynt.booking.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.exelynt.booking.user.Role;
-import com.exelynt.booking.user.User;
+import com.exelynt.booking.user.common.Role;
+import com.exelynt.booking.user.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jws;

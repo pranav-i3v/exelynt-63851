@@ -1,11 +1,11 @@
 package com.exelynt.booking.config;
 
-import com.exelynt.booking.resource.Resource;
-import com.exelynt.booking.resource.ResourceRepository;
-import com.exelynt.booking.resource.ResourceType;
-import com.exelynt.booking.user.Role;
-import com.exelynt.booking.user.User;
-import com.exelynt.booking.user.UserRepository;
+import com.exelynt.booking.resource.entity.Resource;
+import com.exelynt.booking.resource.repository.ResourceRepository;
+import com.exelynt.booking.resource.common.ResourceType;
+import com.exelynt.booking.user.common.Role;
+import com.exelynt.booking.user.entity.User;
+import com.exelynt.booking.user.repository.UserRepository;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

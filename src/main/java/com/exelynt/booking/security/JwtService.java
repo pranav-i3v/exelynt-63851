@@ -1,6 +1,6 @@
 package com.exelynt.booking.security;
 
-import com.exelynt.booking.user.User;
+import com.exelynt.booking.user.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtParser;

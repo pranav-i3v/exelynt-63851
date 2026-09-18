@@ -1,6 +1,6 @@
 package com.exelynt.booking.resource.dto;
 
-import com.exelynt.booking.resource.Resource;
+import com.exelynt.booking.resource.entity.Resource;
 
 /** Entity to DTO translation; entities never cross the API boundary. */
 public final class ResourceMapper {

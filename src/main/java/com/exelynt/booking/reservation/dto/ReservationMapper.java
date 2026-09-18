@@ -1,6 +1,6 @@
 package com.exelynt.booking.reservation.dto;
 
-import com.exelynt.booking.reservation.Reservation;
+import com.exelynt.booking.reservation.entity.Reservation;
 
 /** Entity to DTO translation; entities never cross the API boundary. */
 public final class ReservationMapper {

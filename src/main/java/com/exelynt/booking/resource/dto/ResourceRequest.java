@@ -1,6 +1,6 @@
 package com.exelynt.booking.resource.dto;
 
-import com.exelynt.booking.resource.ResourceType;
+import com.exelynt.booking.resource.common.ResourceType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;

@@ -2,7 +2,7 @@ package com.exelynt.booking.reservation.dto;
 
 import com.exelynt.booking.common.validation.PriceRangeValidatable;
 import com.exelynt.booking.common.validation.ValidPriceRange;
-import com.exelynt.booking.reservation.ReservationStatus;
+import com.exelynt.booking.reservation.common.ReservationStatus;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;

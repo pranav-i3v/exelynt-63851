@@ -1,6 +1,6 @@
 package com.exelynt.booking.resource.dto;
 
-import com.exelynt.booking.resource.ResourceType;
+import com.exelynt.booking.resource.common.ResourceType;
 import java.time.LocalDateTime;
 
 public record ResourceResponse(
