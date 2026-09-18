@@ -1,4 +1,4 @@
-package com.exelynt.booking.auth.entity;
+package com.exelynt.booking.auth.token.entity;
 
 import com.exelynt.booking.user.entity.User;
 import jakarta.persistence.Column;

@@ -1,6 +1,6 @@
 package com.exelynt.booking.auth.token.impl;
 
-import com.exelynt.booking.auth.entity.RefreshToken;
+import com.exelynt.booking.auth.token.entity.RefreshToken;
 import com.exelynt.booking.auth.repository.RefreshTokenRepository;
 import com.exelynt.booking.auth.token.RefreshTokenStore;
 import com.exelynt.booking.auth.token.dto.IssuedRefreshToken;

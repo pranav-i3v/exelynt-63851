@@ -6,7 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.exelynt.booking.auth.entity.RefreshToken;
+import com.exelynt.booking.auth.token.entity.RefreshToken;
 import com.exelynt.booking.auth.repository.RefreshTokenRepository;
 import com.exelynt.booking.auth.token.dto.IssuedRefreshToken;
 import com.exelynt.booking.auth.token.dto.StoredRefreshToken;
