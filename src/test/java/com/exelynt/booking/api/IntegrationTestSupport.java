@@ -4,7 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
-import com.exelynt.booking.security.JwtProperties;
+import com.exelynt.booking.security.config.JwtProperties;
 import com.exelynt.booking.security.TestRsaKeys;
 import com.exelynt.booking.security.jwt.service.JwtService;
 import com.jayway.jsonpath.JsonPath;

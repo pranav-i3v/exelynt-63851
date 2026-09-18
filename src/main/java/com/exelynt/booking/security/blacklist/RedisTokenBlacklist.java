@@ -1,7 +1,8 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.blacklist;
 
 import java.time.Duration;
 import java.time.Instant;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;

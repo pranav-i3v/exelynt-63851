@@ -1,8 +1,8 @@
 package com.exelynt.booking.config;
 
-import com.exelynt.booking.security.InMemoryTokenBlacklist;
-import com.exelynt.booking.security.RedisTokenBlacklist;
-import com.exelynt.booking.security.TokenBlacklist;
+import com.exelynt.booking.security.blacklist.InMemoryTokenBlacklist;
+import com.exelynt.booking.security.blacklist.RedisTokenBlacklist;
+import com.exelynt.booking.security.blacklist.TokenBlacklist;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -5,7 +5,7 @@ import com.exelynt.booking.auth.repository.RefreshTokenRepository;
 import com.exelynt.booking.auth.token.RefreshTokenStore;
 import com.exelynt.booking.auth.token.dto.IssuedRefreshToken;
 import com.exelynt.booking.auth.token.dto.StoredRefreshToken;
-import com.exelynt.booking.security.JwtProperties;
+import com.exelynt.booking.security.config.JwtProperties;
 import com.exelynt.booking.user.entity.User;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

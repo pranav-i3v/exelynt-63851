@@ -1,4 +1,6 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.common;
+
+import com.exelynt.booking.security.config.JwtProperties;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;

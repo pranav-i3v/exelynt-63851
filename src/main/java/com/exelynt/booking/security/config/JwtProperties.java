@@ -1,4 +1,4 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

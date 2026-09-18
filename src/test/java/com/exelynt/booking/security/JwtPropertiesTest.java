@@ -4,7 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.exelynt.booking.security.JwtProperties.Aws;
+import com.exelynt.booking.security.config.JwtProperties;
+import com.exelynt.booking.security.config.JwtProperties.Aws;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

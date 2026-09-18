@@ -3,7 +3,10 @@ package com.exelynt.booking.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.exelynt.booking.security.JwtProperties.Aws;
+import com.exelynt.booking.security.common.RsaKeys;
+import com.exelynt.booking.security.jwt.dto.JwtSigningKey;
+import com.exelynt.booking.security.config.JwtProperties;
+import com.exelynt.booking.security.config.JwtProperties.Aws;
 import com.exelynt.booking.security.jwt.dto.IssuedAccessToken;
 import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.jwt.service.JwtService;

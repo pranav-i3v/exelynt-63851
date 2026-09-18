@@ -1,9 +1,9 @@
 package com.exelynt.booking.security.config;
 
 import com.exelynt.booking.common.web.ApiErrorWriter;
-import com.exelynt.booking.security.RestAccessDeniedHandler;
-import com.exelynt.booking.security.RestAuthenticationEntryPoint;
-import com.exelynt.booking.security.TokenBlacklist;
+import com.exelynt.booking.security.handler.RestAccessDeniedHandler;
+import com.exelynt.booking.security.handler.RestAuthenticationEntryPoint;
+import com.exelynt.booking.security.blacklist.TokenBlacklist;
 import com.exelynt.booking.security.filter.JwtAuthenticationFilter;
 import com.exelynt.booking.security.jwt.service.JwtService;
 import com.exelynt.booking.security.user.service.AppUserDetailsService;

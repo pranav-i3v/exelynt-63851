@@ -1,6 +1,6 @@
 package com.exelynt.booking.config;
 
-import com.exelynt.booking.security.JwtProperties;
+import com.exelynt.booking.security.config.JwtProperties;
 import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.jwt.provider.impl.AwsSecretsManagerJwtKeyProvider;
 import org.springframework.context.annotation.Bean;

@@ -7,7 +7,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.exelynt.booking.security.JwtProperties.Aws;
+import com.exelynt.booking.security.common.RsaKeys;
+import com.exelynt.booking.security.jwt.dto.JwtSigningKey;
+import com.exelynt.booking.security.config.JwtProperties.Aws;
 import java.security.KeyPair;
 import java.time.Duration;
 import java.time.Instant;

@@ -1,4 +1,4 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.handler;
 
 import com.exelynt.booking.common.web.ApiErrorWriter;
 import jakarta.servlet.http.HttpServletRequest;

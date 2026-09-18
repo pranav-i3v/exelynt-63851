@@ -3,6 +3,8 @@ package com.exelynt.booking.security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+
+import com.exelynt.booking.security.blacklist.InMemoryTokenBlacklist;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

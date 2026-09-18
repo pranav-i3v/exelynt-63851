@@ -1,4 +1,4 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.jwt.dto;
 
 import java.time.Instant;
 

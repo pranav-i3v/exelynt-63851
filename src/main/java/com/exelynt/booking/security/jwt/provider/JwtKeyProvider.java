@@ -1,6 +1,6 @@
 package com.exelynt.booking.security.jwt.provider;
 
-import com.exelynt.booking.security.JwtSigningKey;
+import com.exelynt.booking.security.jwt.dto.JwtSigningKey;
 
 import java.security.interfaces.RSAPublicKey;
 import java.util.Optional;

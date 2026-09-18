@@ -1,6 +1,6 @@
 package com.exelynt.booking.config;
 
-import com.exelynt.booking.security.SecurityUtils;
+import com.exelynt.booking.security.common.SecurityUtils;
 import java.util.Optional;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -9,7 +9,7 @@ import com.exelynt.booking.resource.dto.ResourceRequest;
 import com.exelynt.booking.resource.dto.ResourceResponse;
 import com.exelynt.booking.resource.entity.Resource;
 import com.exelynt.booking.resource.repository.ResourceRepository;
-import com.exelynt.booking.security.SecurityUtils;
+import com.exelynt.booking.security.common.SecurityUtils;
 import java.util.List;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;

@@ -1,8 +1,9 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.common;
 
 import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import java.util.Optional;
 
+import com.exelynt.booking.security.jwt.dto.JwtTokenDetails;
 import com.exelynt.booking.security.user.AppUserPrincipal;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

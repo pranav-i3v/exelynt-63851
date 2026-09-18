@@ -2,8 +2,8 @@ package com.exelynt.booking.security.filter;
 
 import com.exelynt.booking.common.logging.MdcUser;
 import com.exelynt.booking.common.web.ApiErrorWriter;
-import com.exelynt.booking.security.JwtTokenDetails;
-import com.exelynt.booking.security.TokenBlacklist;
+import com.exelynt.booking.security.jwt.dto.JwtTokenDetails;
+import com.exelynt.booking.security.blacklist.TokenBlacklist;
 import com.exelynt.booking.security.jwt.service.JwtService;
 import com.exelynt.booking.security.user.AppUserPrincipal;
 import com.exelynt.booking.security.user.service.AppUserDetailsService;
