@@ -23,8 +23,9 @@ spring:
 
   data:
     redis:
-      # Only contacted when app.security.token-blacklist=redis. Credentials, as
-      # ever, come from the environment and have no default.
+      # Redis holds the revoked-access-token list and is required: without it a
+      # logout would only be honoured by the instance that served it. Credentials,
+      # as ever, come from the environment.
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       username: ${REDIS_USERNAME:}
@@ -74,12 +75,6 @@ app:
       # 0 disables re-reading; set it to pick up a rotated key without a restart.
       refresh-minutes: ${JWT_KEY_REFRESH_MINUTES:0}
 
-  security:
-    # in-memory (default, single instance and tests) | redis (more than one replica).
-    # With more than one replica this MUST be redis, or a logout is only honoured
-    # by the instance that served it.
-    token-blacklist: ${TOKEN_BLACKLIST:in-memory}
-
   auth:
     # Hourly sweep of expired refresh tokens. Revoked-but-unexpired tokens are
     # deliberately kept until they expire: they are what makes a replayed token
@@ -103,17 +98,16 @@ management:
         liveness:
           include: livenessState
         readiness:
-          # Readiness fails while the database is unreachable.
-          include: readinessState,db
+          # Readiness fails while the database or Redis is unreachable: both gate
+          # authentication, so an instance without them cannot serve traffic.
+          include: readinessState,db,redis
     info:
       access: read-only
   health:
     db:
       enabled: true
     redis:
-      # Turned on by the redis-blacklist profile; otherwise Redis is not in use
-      # and must not drag the health status down.
-      enabled: ${REDIS_HEALTH_ENABLED:false}
+      enabled: true
   info:
     env:
       enabled: true
@@ -153,22 +147,3 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
----
-# Shared blacklist across replicas: SPRING_PROFILES_ACTIVE=redis-blacklist
-spring:
-  config:
-    activate:
-      on-profile: redis-blacklist
-app:
-  security:
-    token-blacklist: redis
-management:
-  health:
-    redis:
-      enabled: true
-  endpoint:
-    health:
-      group:
-        readiness:
-          # Redis now gates authentication, so an instance without it is not ready.
-          include: readinessState,db,redis

@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(StubSecretsManagerConfiguration.class)
+@Import({StubSecretsManagerConfiguration.class, StubRedisConfiguration.class})
 abstract class IntegrationTestSupport {
 
     protected static final String ADMIN_USERNAME = "admin";

@@ -5,6 +5,7 @@ import com.exelynt.booking.common.exception.common.FieldErrorDetail;
 import com.exelynt.booking.common.exception.type.BadRequestException;
 import com.exelynt.booking.common.exception.type.ConflictException;
 import com.exelynt.booking.common.exception.type.NotFoundException;
+import com.exelynt.booking.common.exception.type.ServiceUnavailableException;
 import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import com.exelynt.booking.common.logging.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -150,6 +151,13 @@ public class GlobalExceptionHandler {
                                                              HttpServletRequest request) {
         log.warn("Data integrity violation on {}", request.getRequestURI());
         return build(HttpStatus.CONFLICT, "The request conflicts with the current state of the data", request, List.of());
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(ServiceUnavailableException ex,
+                                                                  HttpServletRequest request) {
+        log.error("Dependency unavailable on {}", request.getRequestURI(), ex);
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(Exception.class)

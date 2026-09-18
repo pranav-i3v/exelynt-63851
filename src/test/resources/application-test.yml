@@ -27,6 +27,20 @@ app:
       region: eu-west-1
       refresh-minutes: 0
 
+management:
+  health:
+    redis:
+      # The Redis client is stubbed by StubRedisConfiguration, so there is no
+      # connection for the health indicator to probe.
+      enabled: false
+  endpoint:
+    health:
+      group:
+        readiness:
+          # Production includes redis here; with the indicator disabled above it
+          # would fail group validation, so the test profile leaves it out.
+          include: readinessState,db
+
 logging:
   level:
     root: WARN

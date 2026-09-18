@@ -5,9 +5,9 @@ import java.time.Instant;
 /**
  * Store of access-token ids revoked before their natural expiry.
  *
- * <p>The application only depends on this interface, so the in-memory
- * implementation can be swapped for a Redis-backed one without touching the
- * filter or the auth service.</p>
+ * <p>Backed by Redis, so a logout is honoured by every instance and not only
+ * by the one that served it. The interface remains so the filter and the auth
+ * service depend on the behaviour rather than on Redis itself.</p>
  */
 public interface TokenBlacklist {
 

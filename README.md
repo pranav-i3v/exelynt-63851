@@ -81,8 +81,7 @@ and fill it in; `.env` is git-ignored and must never be committed.
 | `JWT_KEY_REFRESH_MINUTES` | no | `0` | Minutes between re-reads of the secret; `0` disables refresh |
 | `JWT_ACCESS_EXPIRY_MINUTES` | no | `15` | Access-token lifetime in minutes |
 | `JWT_REFRESH_EXPIRY_DAYS` | no | `7` | Refresh-token lifetime in days |
-| `TOKEN_BLACKLIST` | no | `in-memory` | `in-memory` (single instance) or `redis` (required for more than one replica) |
-| `REDIS_HOST` / `REDIS_PORT` | when blacklist is `redis` | `localhost` / `6379` | Redis endpoint |
+| `REDIS_HOST` / `REDIS_PORT` | yes | `localhost` / `6379` | Redis endpoint; Redis is required, there is no in-process fallback |
 | `REDIS_USERNAME` / `REDIS_PASSWORD` | when Redis needs auth | — | Redis credentials |
 | `REDIS_SSL` | no | `false` | TLS to Redis |
 | `REFRESH_TOKEN_PURGE_CRON` | no | `0 15 * * * *` | When to sweep expired refresh tokens |
@@ -520,31 +519,36 @@ instances running the sweep at once is harmless.
 
 ### The access-token blacklist
 
-Logout blacklists the access token's `jti` until it would have expired. Two
-backends sit behind `TokenBlacklist`:
+Logout blacklists the access token's `jti` until it would have expired. **Redis
+is the only backend** — there is no in-process option and no property that
+selects one. A per-instance blacklist would leave a logged-out token working on
+every replica except the one that served the logout, which is a hole rather than
+an inefficiency, so Redis is a hard dependency instead of a choice.
 
-| `TOKEN_BLACKLIST` | Backend | Use |
-|---|---|---|
-| `in-memory` (default) | `ConcurrentHashMap` in the process | One instance, and tests |
-| `redis` | Redis key per `jti`, TTL = remaining token life | **Required for more than one replica** |
+Each revoked `jti` is a Redis key with a TTL matching what is left of the
+token's life, so the entry expires exactly when the token would have stopped
+being accepted anyway and nothing has to be swept. Verified across two
+instances: a logout on one is honoured by the other.
 
-With more than one replica the in-memory backend is not merely inefficient, it
-is wrong: a logout served by one instance leaves the token working on the
-others until it expires. Verified on two instances — with `in-memory`, the
-token stayed valid on the second instance after logout; with `redis`, both
-rejected it.
+Because Redis is the only record of what was revoked, it is part of the
+readiness probe — an instance that cannot reach it is not fit to serve traffic.
 
-The `redis-blacklist` profile sets the backend and adds Redis to the readiness
-probe, since Redis then gates authentication:
+#### When Redis is unavailable
 
-```bash
-export SPRING_PROFILES_ACTIVE=redis-blacklist
-export REDIS_HOST=... REDIS_PORT=6379 REDIS_PASSWORD=...
-```
+The request is refused. Admitting it would mean honouring a token that may well
+have been revoked, so the behaviour is fail-closed and honestly reported:
 
-Redis failures are not swallowed. A logout that reported success without
-revoking anything, or a request admitted because the revocation list could not
-be read, are both worse than a visible error.
+| Situation | Result |
+|---|---|
+| Authenticated request | `503`, message `Token revocation check is temporarily unavailable` |
+| `POST /auth/logout` | `503` — refresh tokens are revoked, but the access token could not be, so success is not claimed |
+| `/actuator/health/readiness` | `DOWN`, so the instance is taken out of rotation |
+| Login | still works; it neither reads nor writes the blacklist |
+
+Recovery needs no intervention: once Redis answers again, requests resume (a few
+seconds, while the client reconnects).
+
+---
 
 ---
 
@@ -659,13 +663,13 @@ Two complementary mechanisms:
 mvn test
 ```
 
-118 tests, all green:
+119 tests, all green:
 
 * **Unit** — refresh-token replay detection and the cases it must *not* fire on
   (expired, expired-and-revoked, unknown), `JpaRefreshTokenStore` (only a hash
   is stored, revoke keeps the row, the sweep drops expired rows only), the
   expiry sweep, `RedisTokenBlacklist` (TTL matches the token's remaining life,
-  outages surface), `JwtService` (claims, expiry, wrong signature, unknown `kid`, wrong
+  outages surface rather than being swallowed), `JwtService` (claims, expiry, wrong signature, unknown `kid`, wrong
   issuer, malformed, `alg: none`, HS256 algorithm confusion, and verification
   across a key rotation), `RsaKeys` PEM parsing and public-key derivation, the
   AWS Secrets Manager provider (JSON and bare-PEM secrets, caching, rotation,
@@ -678,17 +682,22 @@ mvn test
   ignored; filtering, paging and sorting; refresh rotation; access and refresh
   after logout return 401; replaying a rotated refresh token ends every session
   of that user and is indistinguishable from an unknown token; the correlation
-  ID header is echoed back; health
+  ID header is echoed back; Redis is the only blacklist backend, and an outage
+  gives 503 on requests and on logout rather than admitting the token; health
   endpoint exposure and detail visibility.
 
-Tests run under the `test` profile against in-memory H2. They exercise the real
-`AwsSecretsManagerJwtKeyProvider`: only the SDK client is stubbed, returning a
-secret in the production JSON shape whose key pair is generated per JVM run. So
-the production key path — fetch, parse, derive, fingerprint — is the one under
-test, no AWS call leaves the JVM, no environment variables are needed, and no
-key material is committed. `SecretsManagerKeySourceTest` additionally asserts
-that Secrets Manager is the *only* key provider in the context and that no
-property can carry a key.
+Tests run under the `test` profile against in-memory H2, and stub only the two
+external clients — the AWS SDK and the Redis template — never the code that uses
+them. `AwsSecretsManagerJwtKeyProvider` and `RedisTokenBlacklist` are the real
+ones, so the production paths (fetch, parse, derive, fingerprint; key naming,
+TTL arithmetic, lookup) are what is exercised. No AWS call leaves the JVM, no
+Redis server is needed, no environment variables are required, and no key
+material is committed.
+
+`SecretsManagerKeySourceTest` and `TokenBlacklistBackendTest` additionally
+assert the two single-source rules: Secrets Manager is the only key provider in
+the context and no property can carry a key, and `RedisTokenBlacklist` is the
+only `TokenBlacklist` bean.
 
 ---
 
@@ -741,8 +750,9 @@ constructor-based.
   theft: every session of that user is revoked, and the 401 is worded
   identically to the one for an unknown token.
 * Logout revokes refresh tokens and blacklists the access token's `jti` until its
-  natural expiry. Use the Redis backend whenever more than one replica runs: the
-  in-memory one only revokes on the instance that served the logout.
+  natural expiry, in Redis — the only backend, so a logout is honoured by every
+  instance. If Redis cannot answer, requests are refused with 503 rather than
+  admitted unchecked.
 * Login failures return the same message for an unknown user and a wrong
   password, so accounts cannot be enumerated.
 * Sessions are disabled entirely (`SessionCreationPolicy.STATELESS`); CSRF is off

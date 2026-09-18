@@ -29,12 +29,24 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         long startedAt = System.nanoTime();
+        String failure = null;
         try {
             filterChain.doFilter(request, response);
+        } catch (IOException | ServletException | RuntimeException ex) {
+            // The status on the response is still the default at this point; the
+            // container only sets 5xx during the error dispatch that follows. Logging
+            // it as-is would record a failed request as a 200.
+            failure = ex.getClass().getSimpleName();
+            throw ex;
         } finally {
             long durationMs = (System.nanoTime() - startedAt) / 1_000_000L;
-            log.info("http_request method={} path={} status={} durationMs={}",
-                    request.getMethod(), request.getRequestURI(), response.getStatus(), durationMs);
+            if (failure == null) {
+                log.info("http_request method={} path={} status={} durationMs={}",
+                        request.getMethod(), request.getRequestURI(), response.getStatus(), durationMs);
+            } else {
+                log.warn("http_request method={} path={} status=failed error={} durationMs={}",
+                        request.getMethod(), request.getRequestURI(), failure, durationMs);
+            }
         }
     }
 }

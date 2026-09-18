@@ -7,6 +7,7 @@ import com.exelynt.booking.auth.dto.TokenResponse;
 import com.exelynt.booking.auth.token.RefreshTokenStore;
 import com.exelynt.booking.auth.token.dto.IssuedRefreshToken;
 import com.exelynt.booking.auth.token.dto.StoredRefreshToken;
+import com.exelynt.booking.common.exception.type.ServiceUnavailableException;
 import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import com.exelynt.booking.security.jwt.dto.IssuedAccessToken;
 import com.exelynt.booking.security.jwt.service.JwtService;
@@ -127,7 +128,15 @@ public class AuthService {
     public void logout(Long userId, String username, JwtTokenDetails tokenDetails) {
         refreshTokenStore.revokeAllForUser(userId);
         if (tokenDetails != null) {
-            tokenBlacklist.blacklist(tokenDetails.jti(), tokenDetails.expiresAt());
+            try {
+                tokenBlacklist.blacklist(tokenDetails.jti(), tokenDetails.expiresAt());
+            } catch (RuntimeException ex) {
+                // Refresh tokens are already revoked, but the access token would stay
+                // usable for the rest of its life. Reporting success here would be a
+                // lie, so the caller gets a 503 and can retry.
+                throw new ServiceUnavailableException(
+                        "Logout could not revoke the access token; please retry", ex);
+            }
         }
         auditService.record(username, AuditAction.LOGOUT, ENTITY_TYPE, userId);
         log.info("logout username={}", username);

@@ -78,7 +78,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String jti = jwtService.extractJti(claims);
-        if (tokenBlacklist.isBlacklisted(jti)) {
+        boolean revoked;
+        try {
+            revoked = tokenBlacklist.isBlacklisted(jti);
+        } catch (RuntimeException ex) {
+            // The blacklist is the only thing that knows a token was revoked, so a
+            // backend that cannot answer means the request cannot be admitted. Say
+            // so with a 503 rather than letting the failure escape the security
+            // chain, where the error dispatch would surface it as a misleading 401.
+            log.error("token_revocation_check_failed - refusing the request", ex);
+            errorWriter.write(request, response, HttpStatus.SERVICE_UNAVAILABLE,
+                    "Token revocation check is temporarily unavailable");
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        if (revoked) {
             log.debug("Rejected a blacklisted access token");
             reject(request, response, "Access token has been revoked");
             return;
