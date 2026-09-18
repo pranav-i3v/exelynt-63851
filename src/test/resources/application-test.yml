@@ -16,7 +16,9 @@ spring:
 
 app:
   jwt:
-    secret: test-only-dummy-secret-value-for-unit-tests-0123456789
+    # Tests generate an ephemeral RSA key pair in memory: no AWS call, and no key
+    # material of any kind in the repository.
+    key-source: generated
     access-expiry-minutes: 15
     refresh-expiry-days: 7
     issuer: resource-booking-system

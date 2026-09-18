@@ -1,35 +1,52 @@
 package com.exelynt.booking.security;
 
-import java.nio.charset.StandardCharsets;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * JWT settings, bound from environment variables. Every value is validated in
- * the canonical constructor, so a missing or weak {@code JWT_SECRET} fails the
- * application at startup instead of at the first login.
+ * JWT settings.
+ *
+ * <p>Tokens are signed with RS256, so the application holds an RSA key pair
+ * rather than a shared secret. Where that key pair comes from is decided by
+ * {@link KeySource}; in production it is AWS Secrets Manager.</p>
+ *
+ * <p>Everything is validated in the canonical constructor, so a misconfigured
+ * key source fails the application at startup instead of at the first login.</p>
  */
 @ConfigurationProperties(prefix = "app.jwt")
-public record JwtProperties(String secret, long accessExpiryMinutes, long refreshExpiryDays, String issuer) {
+public record JwtProperties(
+        KeySource keySource,
+        long accessExpiryMinutes,
+        long refreshExpiryDays,
+        String issuer,
+        Pem pem,
+        Aws aws) {
 
-    /** HS256 requires a key of at least 256 bits. */
-    public static final int MIN_SECRET_BYTES = 32;
+    /** RSA keys below 2048 bits are not accepted. */
+    public static final int MIN_KEY_SIZE_BITS = 2048;
+
+    /** Where the RSA key pair is loaded from. */
+    public enum KeySource {
+        /** Production: the key pair is read from AWS Secrets Manager. */
+        AWS_SECRETS_MANAGER,
+        /** Local development: PEM-encoded keys supplied through configuration. */
+        PEM,
+        /** Tests only: an ephemeral key pair generated at startup. */
+        GENERATED
+    }
+
+    /** PEM-encoded key material supplied directly (PKCS#8 private key, X.509 public key). */
+    public record Pem(String privateKey, String publicKey, String keyId) {
+    }
+
+    /** Location of the secret holding the key pair, plus how often to re-read it. */
+    public record Aws(String secretId, String region, long refreshMinutes) {
+    }
 
     public JwtProperties {
-        if (secret == null || secret.isBlank()) {
-            throw new IllegalStateException(
-                    "JWT_SECRET must be provided; set it as an environment variable (see .env.example)");
-        }
-        // Spring's binder leaves an unresolvable ${VAR} in place rather than failing,
-        // so an unset variable would otherwise be mistaken for a (weak) literal secret.
-        if (secret.startsWith("${") && secret.endsWith("}")) {
-            throw new IllegalStateException("JWT_SECRET is not set: the placeholder " + secret
-                    + " could not be resolved. Export it as an environment variable (see .env.example)");
-        }
-        int length = secret.getBytes(StandardCharsets.UTF_8).length;
-        if (length < MIN_SECRET_BYTES) {
-            throw new IllegalStateException("JWT_SECRET must be at least " + MIN_SECRET_BYTES
-                    + " bytes long for HS256, but is " + length + " bytes");
-        }
+        keySource = keySource == null ? KeySource.AWS_SECRETS_MANAGER : keySource;
+        pem = pem == null ? new Pem(null, null, null) : pem;
+        aws = aws == null ? new Aws(null, null, 0L) : aws;
+
         if (accessExpiryMinutes <= 0) {
             throw new IllegalStateException("JWT_ACCESS_EXPIRY_MINUTES must be greater than zero");
         }
@@ -39,9 +56,33 @@ public record JwtProperties(String secret, long accessExpiryMinutes, long refres
         if (issuer == null || issuer.isBlank()) {
             throw new IllegalStateException("app.jwt.issuer must be configured");
         }
+
+        switch (keySource) {
+            case AWS_SECRETS_MANAGER -> requireConfigured(aws.secretId(), "JWT_SECRET_ID",
+                    "app.jwt.aws.secret-id must name the AWS Secrets Manager secret holding the RSA key pair");
+            case PEM -> requireConfigured(pem.privateKey(), "JWT_PRIVATE_KEY",
+                    "app.jwt.pem.private-key must contain a PKCS#8 PEM private key");
+            case GENERATED -> {
+                // Nothing to configure: the key pair is created in memory at startup.
+            }
+        }
     }
 
     public long accessExpirySeconds() {
         return accessExpiryMinutes * 60L;
+    }
+
+    /**
+     * Spring's binder leaves an unresolvable {@code ${VAR}} in place rather than
+     * failing, so an unset variable would otherwise look like a literal value.
+     */
+    private static void requireConfigured(String value, String variableName, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(message + "; set " + variableName + " (see .env.example)");
+        }
+        if (value.startsWith("${") && value.endsWith("}")) {
+            throw new IllegalStateException(variableName + " is not set: the placeholder " + value
+                    + " could not be resolved. Export it as an environment variable (see .env.example)");
+        }
     }
 }

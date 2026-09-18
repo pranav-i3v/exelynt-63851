@@ -22,7 +22,20 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springdoc.version>3.1.1</springdoc.version>
         <jjwt.version>0.13.0</jjwt.version>
+        <aws-sdk.version>2.55.0</aws-sdk.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Web / REST -->
@@ -79,6 +92,12 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- AWS Secrets Manager: source of the RSA signing key -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
         </dependency>
 
         <!-- JDBC drivers: PostgreSQL by default, MySQL via configuration only -->

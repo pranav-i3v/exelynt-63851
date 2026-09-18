@@ -1,7 +1,13 @@
-# Secrets - never commit real credentials
+# Secrets - never commit real credentials or key material
 .env
 .env.*
 !.env.example
+*.pem
+*.p8
+*.p12
+*.jks
+jwt-private*
+jwt-public*
 
 # Build output
 target/

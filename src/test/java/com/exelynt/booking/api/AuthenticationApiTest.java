@@ -99,6 +99,27 @@ class AuthenticationApiTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("a token signed with an unknown key id is a JSON 401")
+    void unknownKeyIdIsRejected() throws Exception {
+        mockMvc.perform(get("/api/resources")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(unknownKeyIdAccessToken("admin"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Access token is invalid"));
+    }
+
+    @Test
+    @DisplayName("an issued token is RS256 and names the signing key in its header")
+    void issuedTokensAreRs256() throws Exception {
+        String accessToken = accessToken(USER_USERNAME, USER_PASSWORD);
+        String header = new String(java.util.Base64.getUrlDecoder()
+                .decode(accessToken.substring(0, accessToken.indexOf('.'))),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThat(header).contains("\"alg\":\"RS256\"");
+        assertThat(header).contains(jwtKeyProvider.currentSigningKey().keyId());
+    }
+
+    @Test
     @DisplayName("refreshing rotates the token pair and burns the presented refresh token")
     void refreshRotatesTokens() throws Exception {
         String originalRefreshToken = refreshToken(USER_USERNAME, USER_PASSWORD);

@@ -3,12 +3,13 @@ package com.exelynt.booking.api;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.exelynt.booking.security.JwtKeyProvider;
 import com.exelynt.booking.security.JwtProperties;
 import com.exelynt.booking.security.JwtService;
+import com.exelynt.booking.security.RsaKeys;
 import com.jayway.jsonpath.JsonPath;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
@@ -43,6 +44,9 @@ abstract class IntegrationTestSupport {
     @Autowired
     protected JwtService jwtService;
 
+    @Autowired
+    protected JwtKeyProvider jwtKeyProvider;
+
     protected String adminAccessToken;
     protected String userAccessToken;
 
@@ -74,10 +78,11 @@ abstract class IntegrationTestSupport {
         return "Bearer " + token;
     }
 
-    /** Builds a correctly signed token that expired two minutes ago. */
+    /** Builds a correctly signed token, with the real signing key, that expired two minutes ago. */
     protected String expiredAccessToken(String username) {
         Instant expiredAt = Instant.now().minusSeconds(120);
         return Jwts.builder()
+                .header().keyId(jwtKeyProvider.currentSigningKey().keyId()).and()
                 .issuer(jwtProperties.issuer())
                 .subject(username)
                 .id(UUID.randomUUID().toString())
@@ -85,22 +90,37 @@ abstract class IntegrationTestSupport {
                 .claim(JwtService.CLAIM_ROLE, "ADMIN")
                 .issuedAt(Date.from(expiredAt.minusSeconds(900)))
                 .expiration(Date.from(expiredAt))
-                .signWith(Keys.hmacShaKeyFor(jwtProperties.secret().getBytes(StandardCharsets.UTF_8)),
-                        Jwts.SIG.HS256)
+                .signWith(jwtKeyProvider.currentSigningKey().privateKey(), Jwts.SIG.RS256)
                 .compact();
     }
 
-    /** A structurally valid token signed with the wrong key. */
+    /** A structurally valid token signed with a different RSA key, under our key id. */
     protected String foreignlySignedAccessToken(String username) {
-        String otherSecret = "a-completely-different-secret-value-32-bytes+";
+        KeyPair attackerKeyPair = RsaKeys.generateKeyPair();
         return Jwts.builder()
+                .header().keyId(jwtKeyProvider.currentSigningKey().keyId()).and()
                 .issuer(jwtProperties.issuer())
                 .subject(username)
                 .id(UUID.randomUUID().toString())
                 .claim(JwtService.CLAIM_USER_ID, 1L)
                 .claim(JwtService.CLAIM_ROLE, "ADMIN")
                 .expiration(Date.from(Instant.now().plusSeconds(900)))
-                .signWith(Keys.hmacShaKeyFor(otherSecret.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .signWith(attackerKeyPair.getPrivate(), Jwts.SIG.RS256)
+                .compact();
+    }
+
+    /** A token signed with a key the application has never seen, under an unknown key id. */
+    protected String unknownKeyIdAccessToken(String username) {
+        KeyPair attackerKeyPair = RsaKeys.generateKeyPair();
+        return Jwts.builder()
+                .header().keyId("a-key-we-never-issued").and()
+                .issuer(jwtProperties.issuer())
+                .subject(username)
+                .id(UUID.randomUUID().toString())
+                .claim(JwtService.CLAIM_USER_ID, 1L)
+                .claim(JwtService.CLAIM_ROLE, "ADMIN")
+                .expiration(Date.from(Instant.now().plusSeconds(900)))
+                .signWith(attackerKeyPair.getPrivate(), Jwts.SIG.RS256)
                 .compact();
     }
 }

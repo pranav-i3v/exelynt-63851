@@ -13,19 +13,20 @@ IDs, and a full audit trail.
 1. [Tech stack](#tech-stack)
 2. [Prerequisites](#prerequisites)
 3. [Environment variables](#environment-variables)
-4. [Database setup](#database-setup)
-5. [Build and run](#build-and-run)
-6. [Seed users (test only)](#seed-users-test-only)
-7. [Swagger / OpenAPI](#swagger--openapi)
-8. [Token flow with curl](#token-flow-with-curl)
-9. [API reference](#api-reference)
-10. [Error shape](#error-shape)
-11. [Health endpoints](#health-endpoints)
-12. [Logging and the correlation ID](#logging-and-the-correlation-id)
-13. [Audit trail](#audit-trail)
-14. [Tests](#tests)
-15. [Project layout](#project-layout)
-16. [Security notes](#security-notes)
+4. [JWT signing keys](#jwt-signing-keys)
+5. [Database setup](#database-setup)
+6. [Build and run](#build-and-run)
+7. [Seed users (test only)](#seed-users-test-only)
+8. [Swagger / OpenAPI](#swagger--openapi)
+9. [Token flow with curl](#token-flow-with-curl)
+10. [API reference](#api-reference)
+11. [Error shape](#error-shape)
+12. [Health endpoints](#health-endpoints)
+13. [Logging and the correlation ID](#logging-and-the-correlation-id)
+14. [Audit trail](#audit-trail)
+15. [Tests](#tests)
+16. [Project layout](#project-layout)
+17. [Security notes](#security-notes)
 
 ---
 
@@ -35,11 +36,12 @@ IDs, and a full audit trail.
 |---|---|
 | Language / runtime | Java 21 |
 | Framework | Spring Boot 4.1.1 |
-| Security | Spring Security 7.1.1 (the version Boot 4.1.1 manages), stateless JWT HS256 |
+| Security | Spring Security 7.1.1 (the version Boot 4.1.1 manages), stateless JWT RS256 |
 | Persistence | Spring Data JPA / Hibernate 7 |
 | Validation | Jakarta Bean Validation (Hibernate Validator) |
 | Database | PostgreSQL by default, MySQL through configuration only |
 | API docs | springdoc-openapi 3.1.1 (Swagger UI with Bearer auth) |
+| Secrets | AWS Secrets Manager (AWS SDK v2) for the RSA signing key |
 | Ops | Spring Boot Actuator (health + info only) |
 | Tests | JUnit 5, Mockito, MockMvc, Spring Security Test, H2 |
 
@@ -73,7 +75,13 @@ and fill it in; `.env` is git-ignored and must never be committed.
 | `DB_URL` | yes | — | JDBC URL, e.g. `jdbc:postgresql://localhost:5432/booking_db` |
 | `DB_USERNAME` | yes | — | Database user |
 | `DB_PASSWORD` | yes | — | Database password |
-| `JWT_SECRET` | yes | — | HMAC key for HS256. **Must be at least 32 bytes**; startup fails otherwise |
+| `JWT_KEY_SOURCE` | no | `aws-secrets-manager` | `aws-secrets-manager`, `pem` or `generated` |
+| `JWT_SECRET_ID` | when source is `aws-secrets-manager` | — | Name or ARN of the secret holding the RSA key pair |
+| `AWS_REGION` | no | AWS chain | Region of the secret; falls back to the standard AWS region chain |
+| `JWT_KEY_REFRESH_MINUTES` | no | `0` | Minutes between re-reads of the secret; `0` disables refresh |
+| `JWT_PRIVATE_KEY` | when source is `pem` | — | PKCS#8 PEM private key (local development only) |
+| `JWT_PUBLIC_KEY` | no | derived | X.509 PEM public key; derived from the private key when omitted |
+| `JWT_KEY_ID` | no | fingerprint | `kid` published in the token header |
 | `JWT_ACCESS_EXPIRY_MINUTES` | no | `15` | Access-token lifetime in minutes |
 | `JWT_REFRESH_EXPIRY_DAYS` | no | `7` | Refresh-token lifetime in days |
 | `SPRING_PROFILES_ACTIVE` | no | — | Set to `mysql` to run against MySQL |
@@ -81,11 +89,123 @@ and fill it in; `.env` is git-ignored and must never be committed.
 | `DB_POOL_SIZE` | no | `10` | Hikari maximum pool size |
 | `DDL_AUTO` | no | `validate` | Hibernate schema handling; the schema itself comes from `db/<engine>/02_schema.sql` |
 
-Generate a secret with:
+**AWS credentials are never read from configuration.** They come from the
+standard AWS provider chain - an IAM role in production, `AWS_PROFILE` or the
+usual access-key variables locally.
+
+---
+
+## JWT signing keys
+
+Access tokens are signed with **RS256**: the application signs with an RSA
+private key, and anything that needs to verify a token only needs the public
+key. No shared secret is involved.
+
+### Where the key pair comes from
+
+`JWT_KEY_SOURCE` selects one of three providers behind the `JwtKeyProvider`
+interface, so swapping one for another touches no application code:
+
+| Source | Use | Behaviour |
+|---|---|---|
+| `aws-secrets-manager` (default) | Production | Reads the key pair from AWS Secrets Manager at startup |
+| `pem` | Local development | Reads PEM keys from configuration (a git-ignored `.env`) |
+| `generated` | Tests only | Generates an ephemeral key pair in memory; logs a warning |
+
+Whatever the source, the key id is published as the JWT `kid` header, and the
+key material is validated at startup: a missing secret, an unreadable secret, a
+PKCS#1 or passphrase-encrypted key, or an RSA key below 2048 bits each abort the
+boot with a message naming the problem.
+
+### Creating the key pair
 
 ```bash
-openssl rand -base64 48
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt-private.pem
+openssl rsa -in jwt-private.pem -pubout -out jwt-public.pem
 ```
+
+The private key must be PKCS#8 (`BEGIN PRIVATE KEY`). If you have a PKCS#1 key
+(`BEGIN RSA PRIVATE KEY`), convert it once - the application says so explicitly
+if you forget:
+
+```bash
+openssl pkcs8 -topk8 -nocrypt -in jwt-private.pem -out jwt-private-pkcs8.pem
+```
+
+### Storing it in AWS Secrets Manager
+
+The secret value may be a bare PEM private key, or JSON - which is what lets you
+pin an explicit `kid`:
+
+```json
+{
+  "privateKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+  "publicKey":  "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
+  "keyId":      "booking-2026-09"
+}
+```
+
+`publicKey` is optional - it is derived from the private key when absent - and
+`keyId` falls back to a stable fingerprint of the public key.
+
+```bash
+# Build the secret from the generated key pair, then destroy the local private key
+jq -n --rawfile priv jwt-private.pem --rawfile pub jwt-public.pem \
+   '{privateKey:$priv, publicKey:$pub, keyId:"booking-2026-09"}' > /tmp/jwt-secret.json
+
+aws secretsmanager create-secret \
+  --name booking/jwt-signing-key \
+  --description "RS256 signing key for the Resource Booking System" \
+  --secret-string file:///tmp/jwt-secret.json
+
+rm /tmp/jwt-secret.json jwt-private.pem
+```
+
+Point the application at it:
+
+```bash
+export JWT_KEY_SOURCE=aws-secrets-manager
+export JWT_SECRET_ID=booking/jwt-signing-key
+export AWS_REGION=eu-west-1
+```
+
+### IAM permissions
+
+The application only ever reads one secret:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "secretsmanager:GetSecretValue",
+    "Resource": "arn:aws:secretsmanager:eu-west-1:<account-id>:secret:booking/jwt-signing-key-*"
+  }]
+}
+```
+
+Add `kms:Decrypt` on the KMS key if the secret uses a customer-managed one.
+
+### Rotation
+
+The secret is read once at startup. Set `JWT_KEY_REFRESH_MINUTES` to a non-zero
+value to have it re-read periodically: a new `kid` is then picked up without a
+restart, and **public keys seen earlier are kept**, so access tokens issued just
+before the rotation keep verifying until they expire. If a refresh fails, the
+cached key stays in use and the failure is logged rather than breaking every
+request.
+
+With refresh disabled (`0`, the default), rotate with a rolling restart.
+
+### Local development without AWS
+
+```bash
+export JWT_KEY_SOURCE=pem
+export JWT_PRIVATE_KEY="$(cat jwt-private.pem)"
+export JWT_PUBLIC_KEY="$(cat jwt-public.pem)"
+```
+
+Key files and `.env` are git-ignored - never commit one.
 
 ---
 
@@ -215,9 +335,21 @@ curl -s -X POST http://localhost:8080/auth/login \
 }
 ```
 
-The access token is a 15-minute HS256 JWT carrying `sub`, `userId`, `role` and
-`jti`. The refresh token is an opaque random value; only its SHA-256 hash is
-stored server-side.
+The access token is a 15-minute RS256 JWT carrying `sub`, `userId`, `role` and
+`jti`, with the signing key's `kid` in its header:
+
+```json
+{"kid":"booking-2026-09","alg":"RS256"}
+```
+
+The refresh token is an opaque random value; only its SHA-256 hash is stored
+server-side. Any service holding just the public key can verify an access token
+on its own:
+
+```bash
+openssl dgst -sha256 -verify jwt-public.pem -signature sig.bin signing-input.bin
+# Verified OK
+```
 
 ```bash
 ACCESS=$(curl -s -X POST http://localhost:8080/auth/login \
@@ -444,9 +576,13 @@ mvn test
 
 73 tests, all green:
 
-* **Unit** — `JwtService` (claims, expiry, wrong signature, wrong issuer,
-  malformed), `JwtProperties` fail-fast rules, the token blacklist, the sort
-  whitelist, and the auth / resource / reservation services with Mockito.
+* **Unit** — `JwtService` (claims, expiry, wrong signature, unknown `kid`, wrong
+  issuer, malformed, `alg: none`, HS256 algorithm confusion, and verification
+  across a key rotation), `RsaKeys` PEM parsing and public-key derivation, the
+  AWS Secrets Manager provider (JSON and bare-PEM secrets, caching, rotation,
+  failed refresh, missing secret), `JwtProperties` fail-fast rules, the token
+  blacklist, the sort whitelist, and the auth / resource / reservation services
+  with Mockito.
 * **Integration (MockMvc)** — login success and failure; expired, malformed and
   wrongly signed tokens return 401; `USER` gets 403 on admin endpoints; `USER`
   cannot read another user's reservation (404); a `userId` in the request body is
@@ -454,9 +590,10 @@ mvn test
   after logout return 401; the correlation ID header is echoed back; health
   endpoint exposure and detail visibility.
 
-Tests run under the `test` profile against in-memory H2 with their own throwaway
-JWT secret (`src/test/resources/application-test.yml`) — no environment variables
-and no real credentials are involved.
+Tests run under the `test` profile against in-memory H2 with an ephemeral RSA
+key pair generated at startup (`src/test/resources/application-test.yml`) — no
+AWS call, no environment variables, and no key material of any kind in the
+repository.
 
 ---
 
@@ -476,7 +613,8 @@ src/main/java/com/exelynt/booking
 ├── config/        JPA auditing, OpenAPI, data seeder
 ├── reservation/   entity, repository, specifications, service, controller, DTOs
 ├── resource/      entity, repository, service, controller, DTOs
-├── security/      JWT service, filter, blacklist, principal, security config
+├── security/      RS256 JWT service, key providers (AWS Secrets Manager / PEM /
+│                  generated), filter, blacklist, principal, security config
 └── user/          User entity, repository, service
 ```
 
@@ -488,6 +626,16 @@ constructor-based.
 
 ## Security notes
 
+* Access tokens are signed with RS256. The private key never leaves the
+  application, and verifiers need only the public key, so no downstream service
+  has to hold a signing secret.
+* The parser pins the algorithm to RS256 and resolves the key by `kid`, which
+  closes the two classic asymmetric-JWT holes: `alg: none`, and an HMAC token
+  forged with the (freely available) public key as the secret. Both are covered
+  by tests.
+* The signing key lives in AWS Secrets Manager and is fetched with the standard
+  AWS credential chain, so no key material and no AWS credentials appear in
+  configuration, in the repository, or in any log line.
 * Passwords are hashed with BCrypt; the raw value is never stored, logged or returned.
 * Refresh tokens are 64 bytes of `SecureRandom` output; only the SHA-256 hash is
   persisted, so a database dump cannot be replayed against the API.

@@ -1,9 +1,10 @@
 # =====================================================================
 # Resource Booking System
 #
-# Every secret is read from the environment; there are deliberately no
-# fallback values for DB_URL, DB_USERNAME, DB_PASSWORD or JWT_SECRET, so a
-# missing variable fails startup instead of silently using a weak default.
+# Every secret is read from the environment or from AWS Secrets Manager; there
+# are deliberately no fallback values for DB_URL, DB_USERNAME, DB_PASSWORD or
+# JWT_SECRET_ID, so a missing variable fails startup instead of silently using a
+# weak default. No key material is ever stored in this file.
 # See .env.example for the full list.
 # =====================================================================
 spring:
@@ -47,10 +48,25 @@ server:
 
 app:
   jwt:
-    secret: ${JWT_SECRET}
+    # Access tokens are signed with RS256. The key pair lives in AWS Secrets
+    # Manager; "pem" (local development) and "generated" (tests) are the other
+    # sources. No key material is ever read from this file.
+    key-source: ${JWT_KEY_SOURCE:aws-secrets-manager}
     access-expiry-minutes: ${JWT_ACCESS_EXPIRY_MINUTES:15}
     refresh-expiry-days: ${JWT_REFRESH_EXPIRY_DAYS:7}
     issuer: resource-booking-system
+    aws:
+      # Name or ARN of the secret holding the RSA key pair.
+      secret-id: ${JWT_SECRET_ID}
+      # Optional: falls back to the standard AWS region chain when unset.
+      region: ${AWS_REGION:}
+      # 0 disables re-reading; set it to pick up a rotated key without a restart.
+      refresh-minutes: ${JWT_KEY_REFRESH_MINUTES:0}
+    pem:
+      # Only used when key-source=pem. Keep real keys in .env, never in git.
+      private-key: ${JWT_PRIVATE_KEY:}
+      public-key: ${JWT_PUBLIC_KEY:}
+      key-id: ${JWT_KEY_ID:}
 
 management:
   endpoints:
