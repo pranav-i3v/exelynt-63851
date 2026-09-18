@@ -20,13 +20,14 @@ IDs, and a full audit trail.
 8. [Swagger / OpenAPI](#swagger--openapi)
 9. [Token flow with curl](#token-flow-with-curl)
 10. [API reference](#api-reference)
-11. [Error shape](#error-shape)
-12. [Health endpoints](#health-endpoints)
-13. [Logging and the correlation ID](#logging-and-the-correlation-id)
-14. [Audit trail](#audit-trail)
-15. [Tests](#tests)
-16. [Project layout](#project-layout)
-17. [Security notes](#security-notes)
+11. [Refresh tokens and session revocation](#refresh-tokens-and-session-revocation)
+12. [Error shape](#error-shape)
+13. [Health endpoints](#health-endpoints)
+14. [Logging and the correlation ID](#logging-and-the-correlation-id)
+15. [Audit trail](#audit-trail)
+16. [Tests](#tests)
+17. [Project layout](#project-layout)
+18. [Security notes](#security-notes)
 
 ---
 
@@ -80,6 +81,11 @@ and fill it in; `.env` is git-ignored and must never be committed.
 | `JWT_KEY_REFRESH_MINUTES` | no | `0` | Minutes between re-reads of the secret; `0` disables refresh |
 | `JWT_ACCESS_EXPIRY_MINUTES` | no | `15` | Access-token lifetime in minutes |
 | `JWT_REFRESH_EXPIRY_DAYS` | no | `7` | Refresh-token lifetime in days |
+| `TOKEN_BLACKLIST` | no | `in-memory` | `in-memory` (single instance) or `redis` (required for more than one replica) |
+| `REDIS_HOST` / `REDIS_PORT` | when blacklist is `redis` | `localhost` / `6379` | Redis endpoint |
+| `REDIS_USERNAME` / `REDIS_PASSWORD` | when Redis needs auth | — | Redis credentials |
+| `REDIS_SSL` | no | `false` | TLS to Redis |
+| `REFRESH_TOKEN_PURGE_CRON` | no | `0 15 * * * *` | When to sweep expired refresh tokens |
 | `SPRING_PROFILES_ACTIVE` | no | — | Set to `mysql` to run against MySQL |
 | `SERVER_PORT` | no | `8080` | HTTP port |
 | `DB_POOL_SIZE` | no | `10` | Hikari maximum pool size |
@@ -466,6 +472,82 @@ curl -s "http://localhost:8080/api/reservations?status=CONFIRMED&minPrice=50&max
 
 ---
 
+## Refresh tokens and session revocation
+
+### Rotation, and what happens when a token is replayed
+
+Every refresh returns a new pair and revokes the one presented. A legitimate
+client therefore always holds the newest token — so a **second** use of a token
+that rotation already consumed means two parties hold the same credential, which
+is what a stolen token looks like.
+
+On detecting that, every refresh token of that user is revoked. The thief's
+session ends, and so does the victim's: they log in again, the thief cannot.
+This is the behaviour the OAuth 2.0 security BCP asks for, and it is why revoked
+tokens are **kept** until they expire rather than deleted on rotation — deleting
+them would destroy the evidence that a replay is happening.
+
+The 401 body is identical for unknown, expired, revoked and replayed tokens, so
+probing cannot tell them apart. The distinction is recorded server-side:
+`REFRESH_TOKEN_REUSE_DETECTED` in `audit_logs`, and a `WARN` log line.
+
+One limit worth knowing: revocation covers refresh tokens. An access token
+already minted stays valid until it expires (at most 15 minutes) unless it is
+also blacklisted, which happens on logout but not on reuse detection — there is
+no way to enumerate a user's outstanding `jti`s.
+
+### Where refresh tokens live
+
+Behind a `RefreshTokenStore` interface, implemented by `JpaRefreshTokenStore`
+against the `refresh_tokens` table. Only a SHA-256 hash of each token is stored.
+The interface exists so the storage can be swapped — for Redis, for instance —
+without touching login, refresh or logout; the same arrangement as
+`TokenBlacklist` and `JwtKeyProvider`.
+
+Relational storage is the default on purpose: these are seven-day credentials,
+the write rate is one row per login or refresh (not per request), and the table
+gives session listing, an audit trail and a foreign key to `users` for free. A
+Redis-backed store becomes worthwhile at a login rate where writes to the
+primary database hurt; if you go there, keep revoked entries until their natural
+expiry, or replay detection stops working.
+
+### Expired tokens are swept
+
+`ExpiredRefreshTokenPurger` runs on `app.auth.refresh-token-purge-cron` (hourly
+at :15 by default) and deletes tokens past their expiry — and only those.
+Revoked-but-unexpired tokens are left alone for the reason above. Several
+instances running the sweep at once is harmless.
+
+### The access-token blacklist
+
+Logout blacklists the access token's `jti` until it would have expired. Two
+backends sit behind `TokenBlacklist`:
+
+| `TOKEN_BLACKLIST` | Backend | Use |
+|---|---|---|
+| `in-memory` (default) | `ConcurrentHashMap` in the process | One instance, and tests |
+| `redis` | Redis key per `jti`, TTL = remaining token life | **Required for more than one replica** |
+
+With more than one replica the in-memory backend is not merely inefficient, it
+is wrong: a logout served by one instance leaves the token working on the
+others until it expires. Verified on two instances — with `in-memory`, the
+token stayed valid on the second instance after logout; with `redis`, both
+rejected it.
+
+The `redis-blacklist` profile sets the backend and adds Redis to the readiness
+probe, since Redis then gates authentication:
+
+```bash
+export SPRING_PROFILES_ACTIVE=redis-blacklist
+export REDIS_HOST=... REDIS_PORT=6379 REDIS_PASSWORD=...
+```
+
+Redis failures are not swallowed. A logout that reported success without
+revoking anything, or a request admitted because the revocation list could not
+be read, are both worse than a visible error.
+
+---
+
 ## Error shape
 
 Every failure — from a servlet filter, from Spring Security or from a controller —
@@ -564,8 +646,9 @@ Two complementary mechanisms:
   `updatedAt`, `createdBy` and `updatedBy`; the `AuditorAware` reads the username
   from the security context (`system` during startup seeding).
 * **`audit_logs` rows** are written for login success, login failure, logout,
-  token refresh (and refresh failure), and every create / update / delete /
-  status change on resources and reservations. Each row records the actor, the
+  token refresh (and refresh failure), refresh-token replay detection
+  (`REFRESH_TOKEN_REUSE_DETECTED`), and every create / update / delete / status
+  change on resources and reservations. Each row records the actor, the
   action, the entity, the timestamp and the correlation id of the request.
 
 ---
@@ -576,9 +659,13 @@ Two complementary mechanisms:
 mvn test
 ```
 
-73 tests, all green:
+118 tests, all green:
 
-* **Unit** — `JwtService` (claims, expiry, wrong signature, unknown `kid`, wrong
+* **Unit** — refresh-token replay detection and the cases it must *not* fire on
+  (expired, expired-and-revoked, unknown), `JpaRefreshTokenStore` (only a hash
+  is stored, revoke keeps the row, the sweep drops expired rows only), the
+  expiry sweep, `RedisTokenBlacklist` (TTL matches the token's remaining life,
+  outages surface), `JwtService` (claims, expiry, wrong signature, unknown `kid`, wrong
   issuer, malformed, `alg: none`, HS256 algorithm confusion, and verification
   across a key rotation), `RsaKeys` PEM parsing and public-key derivation, the
   AWS Secrets Manager provider (JSON and bare-PEM secrets, caching, rotation,
@@ -589,7 +676,9 @@ mvn test
   wrongly signed tokens return 401; `USER` gets 403 on admin endpoints; `USER`
   cannot read another user's reservation (404); a `userId` in the request body is
   ignored; filtering, paging and sorting; refresh rotation; access and refresh
-  after logout return 401; the correlation ID header is echoed back; health
+  after logout return 401; replaying a rotated refresh token ends every session
+  of that user and is indistinguishable from an unknown token; the correlation
+  ID header is echoed back; health
   endpoint exposure and detail visibility.
 
 Tests run under the `test` profile against in-memory H2. They exercise the real
@@ -608,7 +697,8 @@ property can carry a key.
 ```
 src/main/java/com/exelynt/booking
 ├── BookingApplication.java
-├── auth/          login, refresh rotation, logout, refresh-token entity
+├── auth/          login, refresh rotation with replay detection, logout,
+│                  RefreshTokenStore (+ JPA implementation), expiry sweep
 ├── audit/         AuditLog entity, repository, AuditService
 ├── common/
 │   ├── exception/ error shape + @RestControllerAdvice
@@ -647,10 +737,12 @@ constructor-based.
 * Passwords are hashed with BCrypt; the raw value is never stored, logged or returned.
 * Refresh tokens are 64 bytes of `SecureRandom` output; only the SHA-256 hash is
   persisted, so a database dump cannot be replayed against the API.
-* Refresh tokens rotate on every use — replaying one is a 401.
+* Refresh tokens rotate on every use. Replaying a consumed one is treated as
+  theft: every session of that user is revoked, and the 401 is worded
+  identically to the one for an unknown token.
 * Logout revokes refresh tokens and blacklists the access token's `jti` until its
-  natural expiry. The blacklist sits behind a `TokenBlacklist` interface, so the
-  in-memory implementation can be swapped for Redis without touching the filter.
+  natural expiry. Use the Redis backend whenever more than one replica runs: the
+  in-memory one only revokes on the instance that served the logout.
 * Login failures return the same message for an unknown user and a wrong
   password, so accounts cannot be enumerated.
 * Sessions are disabled entirely (`SessionCreationPolicy.STATELESS`); CSRF is off

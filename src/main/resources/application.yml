@@ -21,6 +21,18 @@ spring:
       pool-name: booking-pool
       maximum-pool-size: ${DB_POOL_SIZE:10}
 
+  data:
+    redis:
+      # Only contacted when app.security.token-blacklist=redis. Credentials, as
+      # ever, come from the environment and have no default.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      timeout: 2s
+
   jpa:
     # The schema is owned by db/<engine>/02_schema.sql; Hibernate only checks
     # that the mapping still matches it.
@@ -62,6 +74,18 @@ app:
       # 0 disables re-reading; set it to pick up a rotated key without a restart.
       refresh-minutes: ${JWT_KEY_REFRESH_MINUTES:0}
 
+  security:
+    # in-memory (default, single instance and tests) | redis (more than one replica).
+    # With more than one replica this MUST be redis, or a logout is only honoured
+    # by the instance that served it.
+    token-blacklist: ${TOKEN_BLACKLIST:in-memory}
+
+  auth:
+    # Hourly sweep of expired refresh tokens. Revoked-but-unexpired tokens are
+    # deliberately kept until they expire: they are what makes a replayed token
+    # detectable.
+    refresh-token-purge-cron: ${REFRESH_TOKEN_PURGE_CRON:0 15 * * * *}
+
 management:
   endpoints:
     web:
@@ -86,6 +110,10 @@ management:
   health:
     db:
       enabled: true
+    redis:
+      # Turned on by the redis-blacklist profile; otherwise Redis is not in use
+      # and must not drag the health status down.
+      enabled: ${REDIS_HEALTH_ENABLED:false}
   info:
     env:
       enabled: true
@@ -124,3 +152,23 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+---
+# Shared blacklist across replicas: SPRING_PROFILES_ACTIVE=redis-blacklist
+spring:
+  config:
+    activate:
+      on-profile: redis-blacklist
+app:
+  security:
+    token-blacklist: redis
+management:
+  health:
+    redis:
+      enabled: true
+  endpoint:
+    health:
+      group:
+        readiness:
+          # Redis now gates authentication, so an instance without it is not ready.
+          include: readinessState,db,redis

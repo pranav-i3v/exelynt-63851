@@ -143,6 +143,58 @@ class AuthenticationApiTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("replaying a rotated refresh token kills every session of that user")
+    void refreshReuseEndsAllSessions() throws Exception {
+        String stolenToken = refreshToken(USER_USERNAME, USER_PASSWORD);
+
+        // The legitimate client rotates once; the thief holds a copy of the old token.
+        String rotated = mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + stolenToken + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String liveToken = JsonPath.read(rotated, "$.refreshToken");
+
+        // The thief replays the consumed token: refused ...
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + stolenToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+
+        // ... and the token the legitimate client is holding is now dead too, so the
+        // session ends for both parties rather than only for the victim.
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + liveToken + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token is invalid, expired or already used"));
+    }
+
+    @Test
+    @DisplayName("reuse detection does not reveal that the token was ever valid")
+    void reuseIsIndistinguishableFromAnUnknownToken() throws Exception {
+        String stolenToken = refreshToken(USER_USERNAME, USER_PASSWORD);
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + stolenToken + "\"}"))
+                .andExpect(status().isOk());
+
+        String replayBody = mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + stolenToken + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+        String unknownBody = mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"never-issued\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(JsonPath.read(replayBody, "$.message").toString())
+                .isEqualTo(JsonPath.read(unknownBody, "$.message").toString());
+    }
+
+    @Test
     @DisplayName("an unknown refresh token is a 401")
     void refreshRejectsUnknownToken() throws Exception {
         mockMvc.perform(post("/auth/refresh")

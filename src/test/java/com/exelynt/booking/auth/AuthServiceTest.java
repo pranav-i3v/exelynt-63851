@@ -12,9 +12,10 @@ import com.exelynt.booking.audit.common.AuditAction;
 import com.exelynt.booking.audit.service.AuditService;
 import com.exelynt.booking.auth.dto.LoginRequest;
 import com.exelynt.booking.auth.dto.TokenResponse;
-import com.exelynt.booking.auth.entity.RefreshToken;
 import com.exelynt.booking.auth.service.AuthService;
-import com.exelynt.booking.auth.service.RefreshTokenService;
+import com.exelynt.booking.auth.token.RefreshTokenStore;
+import com.exelynt.booking.auth.token.dto.IssuedRefreshToken;
+import com.exelynt.booking.auth.token.dto.StoredRefreshToken;
 import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import com.exelynt.booking.security.jwt.dto.IssuedAccessToken;
 import com.exelynt.booking.security.jwt.service.JwtService;
@@ -46,7 +47,7 @@ class AuthServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private RefreshTokenService refreshTokenService;
+    private RefreshTokenStore refreshTokenStore;
     @Mock
     private JwtService jwtService;
     @Mock
@@ -72,7 +73,8 @@ class AuthServiceTest {
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         when(jwtService.generateAccessToken(user))
                 .thenReturn(new IssuedAccessToken("access-token", "jti-1", Instant.now().plusSeconds(900), 900));
-        when(refreshTokenService.issue(user)).thenReturn("refresh-token");
+        when(refreshTokenStore.issue(user))
+                .thenReturn(new IssuedRefreshToken("refresh-token", LocalDateTime.now().plusDays(7)));
 
         TokenResponse response = authService.login(new LoginRequest("alice", "Secret@123"));
 
@@ -93,59 +95,87 @@ class AuthServiceTest {
                 .hasMessage("Invalid username or password");
 
         verify(auditService).record("alice", AuditAction.LOGIN_FAILURE, "User", null);
-        verify(refreshTokenService, never()).issue(any());
+        verify(refreshTokenStore, never()).issue(any());
     }
 
     @Test
     @DisplayName("refresh rotates the token: the presented one is revoked and a new pair is issued")
     void refreshRotatesToken() {
-        RefreshToken stored = new RefreshToken(user, "hash", LocalDateTime.now().plusDays(7));
-        when(refreshTokenService.find("raw-refresh")).thenReturn(Optional.of(stored));
+        StoredRefreshToken stored = usableToken();
+        when(refreshTokenStore.find("raw-refresh")).thenReturn(Optional.of(stored));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user));
         when(jwtService.generateAccessToken(user))
                 .thenReturn(new IssuedAccessToken("new-access", "jti-2", Instant.now().plusSeconds(900), 900));
-        when(refreshTokenService.issue(user)).thenReturn("new-refresh");
+        when(refreshTokenStore.issue(user))
+                .thenReturn(new IssuedRefreshToken("new-refresh", LocalDateTime.now().plusDays(7)));
 
         TokenResponse response = authService.refresh("raw-refresh");
 
         assertThat(response.accessToken()).isEqualTo("new-access");
         assertThat(response.refreshToken()).isEqualTo("new-refresh");
-        verify(refreshTokenService).revoke(stored);
+        verify(refreshTokenStore).revoke(stored);
         verify(auditService).record("alice", AuditAction.TOKEN_REFRESH, "User", 7L);
     }
 
     @Test
-    @DisplayName("an already revoked refresh token is rejected")
-    void refreshRejectsRevokedToken() {
-        RefreshToken stored = new RefreshToken(user, "hash", LocalDateTime.now().plusDays(7));
-        stored.revoke();
-        when(refreshTokenService.find("raw-refresh")).thenReturn(Optional.of(stored));
+    @DisplayName("replaying an already rotated token revokes every session of that user")
+    void refreshReuseRevokesTheWholeFamily() {
+        // A revoked but unexpired token coming back means two parties hold it.
+        StoredRefreshToken replayed = new StoredRefreshToken(
+                "hash", 7L, "alice", LocalDateTime.now().plusDays(7), true);
+        when(refreshTokenStore.find("stolen-token")).thenReturn(Optional.of(replayed));
+        when(refreshTokenStore.revokeAllForUser(7L)).thenReturn(2);
+
+        assertThatThrownBy(() -> authService.refresh("stolen-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Refresh token is invalid, expired or already used");
+
+        verify(refreshTokenStore).revokeAllForUser(7L);
+        verify(auditService).record("alice", AuditAction.REFRESH_TOKEN_REUSE_DETECTED, "User", 7L);
+        // No new pair is handed out to whoever presented the stolen token.
+        verify(refreshTokenStore, never()).issue(any());
+    }
+
+    @Test
+    @DisplayName("an expired token is refused but is not treated as theft")
+    void refreshRejectsExpiredTokenWithoutRevokingEverything() {
+        StoredRefreshToken expired = new StoredRefreshToken(
+                "hash", 7L, "alice", LocalDateTime.now().minusMinutes(1), false);
+        when(refreshTokenStore.find("raw-refresh")).thenReturn(Optional.of(expired));
 
         assertThatThrownBy(() -> authService.refresh("raw-refresh"))
                 .isInstanceOf(UnauthorizedException.class);
 
-        verify(auditService).record("alice", AuditAction.TOKEN_REFRESH_FAILURE, "User", null);
-        verify(refreshTokenService, never()).issue(any());
+        verify(auditService).record("alice", AuditAction.TOKEN_REFRESH_FAILURE, "User", 7L);
+        verify(refreshTokenStore, never()).revokeAllForUser(any());
+        verify(refreshTokenStore, never()).issue(any());
     }
 
     @Test
-    @DisplayName("an expired refresh token is rejected")
-    void refreshRejectsExpiredToken() {
-        RefreshToken stored = new RefreshToken(user, "hash", LocalDateTime.now().minusMinutes(1));
-        when(refreshTokenService.find("raw-refresh")).thenReturn(Optional.of(stored));
+    @DisplayName("an expired token that was also revoked is not mistaken for a replay")
+    void expiredAndRevokedIsNotTreatedAsReuse() {
+        StoredRefreshToken old = new StoredRefreshToken(
+                "hash", 7L, "alice", LocalDateTime.now().minusDays(1), true);
+        when(refreshTokenStore.find("raw-refresh")).thenReturn(Optional.of(old));
 
         assertThatThrownBy(() -> authService.refresh("raw-refresh"))
                 .isInstanceOf(UnauthorizedException.class);
+
+        verify(refreshTokenStore, never()).revokeAllForUser(any());
+        verify(auditService).record("alice", AuditAction.TOKEN_REFRESH_FAILURE, "User", 7L);
     }
 
+
     @Test
-    @DisplayName("an unknown refresh token is rejected")
+    @DisplayName("an unknown refresh token is rejected and revokes nothing")
     void refreshRejectsUnknownToken() {
-        when(refreshTokenService.find("nope")).thenReturn(Optional.empty());
+        when(refreshTokenStore.find("nope")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.refresh("nope"))
                 .isInstanceOf(UnauthorizedException.class);
 
         verify(auditService).record(eq(null), eq(AuditAction.TOKEN_REFRESH_FAILURE), eq("User"), eq(null));
+        verify(refreshTokenStore, never()).revokeAllForUser(any());
     }
 
     @Test
@@ -155,7 +185,7 @@ class AuthServiceTest {
 
         authService.logout(7L, "alice", new JwtTokenDetails("jti-3", expiry));
 
-        verify(refreshTokenService).revokeAllForUser(7L);
+        verify(refreshTokenStore).revokeAllForUser(7L);
         verify(tokenBlacklist).blacklist("jti-3", expiry);
         verify(auditService).record("alice", AuditAction.LOGOUT, "User", 7L);
     }
@@ -163,5 +193,9 @@ class AuthServiceTest {
     private Authentication mockAuthentication() {
         return new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                 "alice", null, java.util.List.of());
+    }
+
+    private StoredRefreshToken usableToken() {
+        return new StoredRefreshToken("hash", 7L, "alice", LocalDateTime.now().plusDays(7), false);
     }
 }

@@ -3,14 +3,17 @@ package com.exelynt.booking.security;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.stereotype.Component;
 
 /**
  * Single-node {@link TokenBlacklist}. Entries are purged lazily once their
  * token would have expired anyway, so the map stays bounded by the number of
  * logouts within one access-token lifetime.
+ *
+ * <p>The state lives in this process only, so it is correct for a single
+ * instance and for tests. Running more than one replica needs the Redis
+ * implementation, or a logout on one instance will not be honoured by the
+ * others. {@code TokenBlacklistConfiguration} picks between them.</p>
  */
-@Component
 public class InMemoryTokenBlacklist implements TokenBlacklist {
 
     private final Map<String, Instant> revokedUntil = new ConcurrentHashMap<>();

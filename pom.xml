@@ -94,6 +94,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Redis: shared access-token blacklist across instances -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- AWS Secrets Manager: source of the RSA signing key -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

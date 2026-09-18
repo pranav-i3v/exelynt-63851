@@ -4,7 +4,9 @@ import com.exelynt.booking.audit.common.AuditAction;
 import com.exelynt.booking.audit.service.AuditService;
 import com.exelynt.booking.auth.dto.LoginRequest;
 import com.exelynt.booking.auth.dto.TokenResponse;
-import com.exelynt.booking.auth.entity.RefreshToken;
+import com.exelynt.booking.auth.token.RefreshTokenStore;
+import com.exelynt.booking.auth.token.dto.IssuedRefreshToken;
+import com.exelynt.booking.auth.token.dto.StoredRefreshToken;
 import com.exelynt.booking.common.exception.type.UnauthorizedException;
 import com.exelynt.booking.security.jwt.dto.IssuedAccessToken;
 import com.exelynt.booking.security.jwt.service.JwtService;
@@ -29,23 +31,25 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String ENTITY_TYPE = "User";
+    /** One message for unknown, expired, revoked and replayed tokens alike: no hints for a probe. */
+    private static final String INVALID_REFRESH_TOKEN = "Refresh token is invalid, expired or already used";
 
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
-    private final RefreshTokenService refreshTokenService;
+    private final RefreshTokenStore refreshTokenStore;
     private final JwtService jwtService;
     private final TokenBlacklist tokenBlacklist;
     private final AuditService auditService;
 
     public AuthService(AuthenticationManager authenticationManager,
                        UserRepository userRepository,
-                       RefreshTokenService refreshTokenService,
+                       RefreshTokenStore refreshTokenStore,
                        JwtService jwtService,
                        TokenBlacklist tokenBlacklist,
                        AuditService auditService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
-        this.refreshTokenService = refreshTokenService;
+        this.refreshTokenStore = refreshTokenStore;
         this.jwtService = jwtService;
         this.tokenBlacklist = tokenBlacklist;
         this.auditService = auditService;
@@ -74,21 +78,40 @@ public class AuthService {
 
     /**
      * Rotates a refresh token: the presented token is revoked and a brand new
-     * pair is issued. Unknown, revoked and expired tokens are all rejected with
-     * the same 401.
+     * pair is issued.
+     *
+     * <p>Replaying a token that rotation already consumed is treated as theft,
+     * not as a mistake: rotation means a legitimate client always holds the
+     * newest token, so a second use of an old one says two parties hold the
+     * same credential. Every refresh token of that user is revoked, which ends
+     * the attacker's session and the victim's alike — the victim logs in again,
+     * the attacker cannot.</p>
      */
     @Transactional
     public TokenResponse refresh(String rawRefreshToken) {
-        Optional<RefreshToken> stored = refreshTokenService.find(rawRefreshToken);
-        if (stored.isEmpty() || !stored.get().isUsable()) {
-            String actor = stored.map(token -> token.getUser().getUsername()).orElse(null);
-            auditService.record(actor, AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, null);
-            throw new UnauthorizedException("Refresh token is invalid, expired or already used");
+        Optional<StoredRefreshToken> stored = refreshTokenStore.find(rawRefreshToken);
+        if (stored.isEmpty()) {
+            auditService.record(null, AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, null);
+            throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
         }
 
-        RefreshToken token = stored.get();
-        User user = token.getUser();
-        refreshTokenService.revoke(token);
+        StoredRefreshToken token = stored.get();
+        if (token.isReplayOfConsumedToken()) {
+            int revoked = refreshTokenStore.revokeAllForUser(token.userId());
+            auditService.record(token.username(), AuditAction.REFRESH_TOKEN_REUSE_DETECTED,
+                    ENTITY_TYPE, token.userId());
+            log.warn("refresh_token_reuse_detected username={} revokedTokens={} - "
+                    + "all sessions for this user have been ended", token.username(), revoked);
+            throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
+        }
+        if (!token.isUsable()) {
+            auditService.record(token.username(), AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, token.userId());
+            throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
+        }
+
+        User user = userRepository.findById(token.userId())
+                .orElseThrow(() -> new UnauthorizedException(INVALID_REFRESH_TOKEN));
+        refreshTokenStore.revoke(token);
 
         TokenResponse response = issueTokenPair(user);
         auditService.record(user.getUsername(), AuditAction.TOKEN_REFRESH, ENTITY_TYPE, user.getId());
@@ -102,7 +125,7 @@ public class AuthService {
      */
     @Transactional
     public void logout(Long userId, String username, JwtTokenDetails tokenDetails) {
-        refreshTokenService.revokeAllForUser(userId);
+        refreshTokenStore.revokeAllForUser(userId);
         if (tokenDetails != null) {
             tokenBlacklist.blacklist(tokenDetails.jti(), tokenDetails.expiresAt());
         }
@@ -112,7 +135,7 @@ public class AuthService {
 
     private TokenResponse issueTokenPair(User user) {
         IssuedAccessToken accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = refreshTokenService.issue(user);
-        return TokenResponse.bearer(accessToken.token(), refreshToken, accessToken.expiresInSeconds());
+        IssuedRefreshToken refreshToken = refreshTokenStore.issue(user);
+        return TokenResponse.bearer(accessToken.token(), refreshToken.value(), accessToken.expiresInSeconds());
     }
 }
