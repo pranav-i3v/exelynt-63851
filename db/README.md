@@ -9,7 +9,7 @@ Scripts are idempotent — re-running them is safe.
 
 | Script | Purpose | Runs as |
 |---|---|---|
-| `01_create_database.sql` | Creates the `booking_app` login role and the `booking_db` database | DB superuser (`postgres` / `root`) |
+| `01_create_database.sql` | Creates the `booking_app` login role and the `booking_db` database | DB superuser (`postgres`) |
 | `02_schema.sql` | Creates the 5 tables, constraints and indexes | `booking_app` |
 | `99_drop.sql` | Drops all tables (destructive teardown) | `booking_app` |
 
@@ -19,7 +19,7 @@ variable. No password is ever read from these files by the application.
 
 ---
 
-## PostgreSQL (default)
+## PostgreSQL
 
 **Step 1 — create the role and the database** (as superuser):
 
@@ -60,46 +60,6 @@ psql -U booking_app -h localhost -d booking_db -f db/postgresql/99_drop.sql
 
 ---
 
-## MySQL 8+
-
-**Step 1 — create the user and the database** (as root):
-
-```bash
-mysql -u root -p < db/mysql/01_create_database.sql
-```
-
-**Step 2 — create the schema:**
-
-```bash
-mysql -u booking_app -p booking_db < db/mysql/02_schema.sql
-```
-
-**Step 3 — verify:**
-
-```bash
-mysql -u booking_app -p -e 'SHOW TABLES;' booking_db
-```
-
-**Step 4 — point the app at it.** MySQL is a configuration-only switch: activate
-the `mysql` profile and change the URL. No code or rebuild required.
-
-```bash
-export SPRING_PROFILES_ACTIVE=mysql
-export DB_URL='jdbc:mysql://localhost:3306/booking_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true'
-export DB_USERNAME=booking_app
-export DB_PASSWORD=<the password from step 1>
-```
-
-**Step 5 — start the app.** Same seeding behaviour as PostgreSQL.
-
-**Step 6 (optional) — tear down:**
-
-```bash
-mysql -u booking_app -p booking_db < db/mysql/99_drop.sql
-```
-
----
-
 ## Table overview
 
 | Table | Columns |
@@ -112,6 +72,9 @@ mysql -u booking_app -p booking_db < db/mysql/99_drop.sql
 
 Audit columns are `created_at`, `updated_at`, `created_by`, `updated_by`, filled
 by JPA auditing (`AuditorAware` reads the username from the security context).
+
+PostgreSQL is the only supported engine: the scripts use PostgreSQL types and
+`CHECK` constraints, and only the PostgreSQL driver ships with the application.
 
 Database-level guards mirror the Bean Validation rules: `end_time > start_time`,
 `price >= 0`, and `CHECK` constraints on every enum column.

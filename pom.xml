@@ -106,7 +106,7 @@
             <artifactId>secretsmanager</artifactId>
         </dependency>
 
-        <!-- JDBC drivers: PostgreSQL by default, MySQL via configuration only -->
+        <!-- JDBC driver -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

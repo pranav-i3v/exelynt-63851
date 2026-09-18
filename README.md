@@ -40,7 +40,7 @@ IDs, and a full audit trail.
 | Security | Spring Security 7.1.1 (the version Boot 4.1.1 manages), stateless JWT RS256 |
 | Persistence | Spring Data JPA / Hibernate 7 |
 | Validation | Jakarta Bean Validation (Hibernate Validator) |
-| Database | PostgreSQL by default, MySQL through configuration only |
+| Database | PostgreSQL |
 | API docs | springdoc-openapi 3.1.1 (Swagger UI with Bearer auth) |
 | Secrets | AWS Secrets Manager (AWS SDK v2) for the RSA signing key |
 | Ops | Spring Boot Actuator (health + info only) |
@@ -59,8 +59,8 @@ IDs, and a full audit trail.
 
 * JDK 21 (`java -version` should report 21)
 * Maven 3.9+ (or use the `mvnw` wrapper if you add one)
-* PostgreSQL 14+ **or** MySQL 8+
-* `curl` and `psql` / `mysql` clients for the examples below
+* PostgreSQL 14+
+* `curl` and `psql` for the examples below
 
 ---
 
@@ -85,10 +85,9 @@ and fill it in; `.env` is git-ignored and must never be committed.
 | `REDIS_USERNAME` / `REDIS_PASSWORD` | when Redis needs auth | — | Redis credentials |
 | `REDIS_SSL` | no | `false` | TLS to Redis |
 | `REFRESH_TOKEN_PURGE_CRON` | no | `0 15 * * * *` | When to sweep expired refresh tokens |
-| `SPRING_PROFILES_ACTIVE` | no | — | Set to `mysql` to run against MySQL |
 | `SERVER_PORT` | no | `8080` | HTTP port |
 | `DB_POOL_SIZE` | no | `10` | Hikari maximum pool size |
-| `DDL_AUTO` | no | `validate` | Hibernate schema handling; the schema itself comes from `db/<engine>/02_schema.sql` |
+| `DDL_AUTO` | no | `validate` | Hibernate schema handling; the schema itself comes from `db/postgresql/02_schema.sql` |
 
 **No variable in this table carries key material.** The RSA key pair is read
 from AWS Secrets Manager and nowhere else; `JWT_SECRET_ID` only names the
@@ -218,10 +217,9 @@ the key never lives on disk in the project, and `*.pem` is git-ignored.
 
 ## Database setup
 
-Full step-by-step instructions, including verification commands, live in
-[`db/README.md`](db/README.md). The short version:
-
-### PostgreSQL (default)
+PostgreSQL is the only supported engine. Full step-by-step instructions,
+including verification commands, live in [`db/README.md`](db/README.md). The
+short version:
 
 ```bash
 # 1. role + database (as superuser)
@@ -237,28 +235,6 @@ export DB_URL=jdbc:postgresql://localhost:5432/booking_db
 export DB_USERNAME=booking_app
 export DB_PASSWORD=<your password>
 ```
-
-### MySQL
-
-Switching engines is **configuration only** — no code change, no rebuild.
-
-```bash
-# 1. user + database (as root)
-mysql -u root -p < db/mysql/01_create_database.sql
-# 2. schema
-mysql -u booking_app -p booking_db < db/mysql/02_schema.sql
-# 3. verify
-mysql -u booking_app -p -e 'SHOW TABLES;' booking_db
-```
-
-```bash
-export SPRING_PROFILES_ACTIVE=mysql
-export DB_URL='jdbc:mysql://localhost:3306/booking_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true'
-export DB_USERNAME=booking_app
-export DB_PASSWORD=<your password>
-```
-
-Both drivers ship with the application; the JDBC URL selects the dialect.
 
 ### Schema
 

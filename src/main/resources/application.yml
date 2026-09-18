@@ -12,8 +12,8 @@ spring:
     name: resource-booking-system
 
   datasource:
-    # PostgreSQL by default. Switching to MySQL is configuration only:
-    # activate the "mysql" profile and point DB_URL at a MySQL instance.
+    # PostgreSQL. The schema in db/postgresql/02_schema.sql uses PostgreSQL
+    # types and constraints, so the engine is not interchangeable.
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
@@ -35,7 +35,7 @@ spring:
       timeout: 2s
 
   jpa:
-    # The schema is owned by db/<engine>/02_schema.sql; Hibernate only checks
+    # The schema is owned by db/postgresql/02_schema.sql; Hibernate only checks
     # that the mapping still matches it.
     hibernate:
       ddl-auto: ${DDL_AUTO:validate}
@@ -135,15 +135,3 @@ springdoc:
     tags-sorter: alpha
   api-docs:
     path: /v3/api-docs
-
----
-# Configuration-only switch to PostgreSQL: SPRING_PROFILES_ACTIVE=postgres
-spring:
-  config:
-    activate:
-      on-profile: postgres
-  jpa:
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
