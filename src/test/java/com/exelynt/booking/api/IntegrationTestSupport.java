@@ -3,9 +3,9 @@ package com.exelynt.booking.api;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.exelynt.booking.security.JwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.JwtProperties;
-import com.exelynt.booking.security.JwtService;
+import com.exelynt.booking.security.jwt.service.JwtService;
 import com.exelynt.booking.security.RsaKeys;
 import com.jayway.jsonpath.JsonPath;
 import io.jsonwebtoken.Jwts;

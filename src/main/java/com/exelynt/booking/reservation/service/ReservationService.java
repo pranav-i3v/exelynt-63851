@@ -17,7 +17,7 @@ import com.exelynt.booking.reservation.dto.ReservationUpdateRequest;
 import com.exelynt.booking.reservation.entity.Reservation;
 import com.exelynt.booking.resource.entity.Resource;
 import com.exelynt.booking.resource.service.ResourceService;
-import com.exelynt.booking.security.AppUserPrincipal;
+import com.exelynt.booking.security.user.AppUserPrincipal;
 import com.exelynt.booking.security.SecurityUtils;
 import com.exelynt.booking.user.entity.User;
 import com.exelynt.booking.user.service.UserService;

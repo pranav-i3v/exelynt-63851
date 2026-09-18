@@ -4,7 +4,7 @@ import com.exelynt.booking.auth.service.AuthService;
 import com.exelynt.booking.auth.dto.LoginRequest;
 import com.exelynt.booking.auth.dto.RefreshRequest;
 import com.exelynt.booking.auth.dto.TokenResponse;
-import com.exelynt.booking.security.AppUserPrincipal;
+import com.exelynt.booking.security.user.AppUserPrincipal;
 import com.exelynt.booking.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;

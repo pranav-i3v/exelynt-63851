@@ -1,10 +1,10 @@
 package com.exelynt.booking.config;
 
-import com.exelynt.booking.security.AwsSecretsManagerJwtKeyProvider;
-import com.exelynt.booking.security.GeneratedJwtKeyProvider;
-import com.exelynt.booking.security.JwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.impl.AwsSecretsManagerJwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.impl.GeneratedJwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import com.exelynt.booking.security.JwtProperties;
-import com.exelynt.booking.security.PemJwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.impl.PemJwtKeyProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

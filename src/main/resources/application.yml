@@ -121,12 +121,12 @@ springdoc:
     path: /v3/api-docs
 
 ---
-# Configuration-only switch to MySQL: SPRING_PROFILES_ACTIVE=mysql
+# Configuration-only switch to PostgreSQL: SPRING_PROFILES_ACTIVE=postgres
 spring:
   config:
     activate:
-      on-profile: mysql
+      on-profile: postgres
   jpa:
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect

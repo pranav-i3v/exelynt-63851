@@ -14,6 +14,9 @@ import java.time.Instant;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Base64;
+
+import com.exelynt.booking.security.jwt.provider.impl.AwsSecretsManagerJwtKeyProvider;
+import com.exelynt.booking.security.jwt.provider.JwtKeyProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

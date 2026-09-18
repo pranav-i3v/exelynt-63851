@@ -1,4 +1,4 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.user;
 
 import com.exelynt.booking.user.common.Role;
 import com.exelynt.booking.user.entity.User;

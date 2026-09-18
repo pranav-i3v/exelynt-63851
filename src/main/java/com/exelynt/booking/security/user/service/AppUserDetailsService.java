@@ -1,5 +1,6 @@
-package com.exelynt.booking.security;
+package com.exelynt.booking.security.user.service;
 
+import com.exelynt.booking.security.user.AppUserPrincipal;
 import com.exelynt.booking.user.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;

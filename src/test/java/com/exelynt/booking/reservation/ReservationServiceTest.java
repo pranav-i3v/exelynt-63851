@@ -24,7 +24,7 @@ import com.exelynt.booking.reservation.service.ReservationService;
 import com.exelynt.booking.resource.entity.Resource;
 import com.exelynt.booking.resource.service.ResourceService;
 import com.exelynt.booking.resource.common.ResourceType;
-import com.exelynt.booking.security.AppUserPrincipal;
+import com.exelynt.booking.security.user.AppUserPrincipal;
 import com.exelynt.booking.user.common.Role;
 import com.exelynt.booking.user.entity.User;
 import com.exelynt.booking.user.service.UserService;
