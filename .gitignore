@@ -1,0 +1,30 @@
+# Secrets - never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Build output
+target/
+build/
+out/
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+nb-project/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

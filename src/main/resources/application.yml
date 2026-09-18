@@ -1,0 +1,116 @@
+# =====================================================================
+# Resource Booking System
+#
+# Every secret is read from the environment; there are deliberately no
+# fallback values for DB_URL, DB_USERNAME, DB_PASSWORD or JWT_SECRET, so a
+# missing variable fails startup instead of silently using a weak default.
+# See .env.example for the full list.
+# =====================================================================
+spring:
+  application:
+    name: resource-booking-system
+
+  datasource:
+    # PostgreSQL by default. Switching to MySQL is configuration only:
+    # activate the "mysql" profile and point DB_URL at a MySQL instance.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      pool-name: booking-pool
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+
+  jpa:
+    # The schema is owned by db/<engine>/02_schema.sql; Hibernate only checks
+    # that the mapping still matches it.
+    hibernate:
+      ddl-auto: ${DDL_AUTO:validate}
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  jackson:
+    default-property-inclusion: always
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    # Errors are rendered by the @RestControllerAdvice, never by the servlet container.
+    whitelabel:
+      enabled: false
+    include-message: never
+    include-stacktrace: never
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-expiry-minutes: ${JWT_ACCESS_EXPIRY_MINUTES:15}
+    refresh-expiry-days: ${JWT_REFRESH_EXPIRY_DAYS:7}
+    issuer: resource-booking-system
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only health and info are reachable; everything else stays closed.
+        include: health,info
+  endpoint:
+    health:
+      access: read-only
+      show-details: when-authorized
+      roles: ADMIN
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          # Readiness fails while the database is unreachable.
+          include: readinessState,db
+    info:
+      access: read-only
+  health:
+    db:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  application:
+    name: Resource Booking System
+    version: 1.0.0
+
+logging:
+  structured:
+    format:
+      # Structured JSON logs (Elastic Common Schema) on stdout.
+      console: ecs
+  level:
+    root: INFO
+    com.exelynt.booking: INFO
+    # Never raise these to DEBUG in production: they would print SQL parameters.
+    org.hibernate.SQL: WARN
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+---
+# Configuration-only switch to MySQL: SPRING_PROFILES_ACTIVE=mysql
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect

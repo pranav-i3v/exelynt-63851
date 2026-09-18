@@ -1,0 +1,27 @@
+# Throwaway test configuration, layered on top of the main application.yml.
+# Nothing here is a real credential: the JWT secret is a fixed dummy string and
+# the database is in-memory H2. These keys override their ${ENV_VAR} counterparts
+# in application.yml, so tests need no environment variables at all.
+spring:
+  datasource:
+    url: jdbc:h2:mem:booking;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      # H2 is created from the JPA mapping; the real schema lives in db/<engine>/02_schema.sql.
+      ddl-auto: create-drop
+    open-in-view: false
+
+app:
+  jwt:
+    secret: test-only-dummy-secret-value-for-unit-tests-0123456789
+    access-expiry-minutes: 15
+    refresh-expiry-days: 7
+    issuer: resource-booking-system
+
+logging:
+  level:
+    root: WARN
+    com.exelynt.booking: INFO

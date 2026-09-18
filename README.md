@@ -1,0 +1,503 @@
+# Resource Booking System
+
+A RESTful booking system for rooms, vehicles and equipment, built as **one Spring
+Boot application** (a modular monolith — no microservices). Stateless JWT
+authentication with refresh-token rotation, role-based authorisation, filtered and
+paginated queries via JPA Specifications, structured JSON logging with correlation
+IDs, and a full audit trail.
+
+---
+
+## Table of contents
+
+1. [Tech stack](#tech-stack)
+2. [Prerequisites](#prerequisites)
+3. [Environment variables](#environment-variables)
+4. [Database setup](#database-setup)
+5. [Build and run](#build-and-run)
+6. [Seed users (test only)](#seed-users-test-only)
+7. [Swagger / OpenAPI](#swagger--openapi)
+8. [Token flow with curl](#token-flow-with-curl)
+9. [API reference](#api-reference)
+10. [Error shape](#error-shape)
+11. [Health endpoints](#health-endpoints)
+12. [Logging and the correlation ID](#logging-and-the-correlation-id)
+13. [Audit trail](#audit-trail)
+14. [Tests](#tests)
+15. [Project layout](#project-layout)
+16. [Security notes](#security-notes)
+
+---
+
+## Tech stack
+
+| Concern | Choice |
+|---|---|
+| Language / runtime | Java 21 |
+| Framework | Spring Boot 4.1.1 |
+| Security | Spring Security 7.1.1 (the version Boot 4.1.1 manages), stateless JWT HS256 |
+| Persistence | Spring Data JPA / Hibernate 7 |
+| Validation | Jakarta Bean Validation (Hibernate Validator) |
+| Database | PostgreSQL by default, MySQL through configuration only |
+| API docs | springdoc-openapi 3.1.1 (Swagger UI with Bearer auth) |
+| Ops | Spring Boot Actuator (health + info only) |
+| Tests | JUnit 5, Mockito, MockMvc, Spring Security Test, H2 |
+
+> **Note on Spring Security 6.** The brief asked for Spring Security 6, but Boot
+> 4.1.1 manages Spring Security 7.1.1 and the two are not interchangeable (Boot 4
+> builds on Spring Framework 7). Pinning Security 6 under Boot 4 does not compile,
+> so the project uses the managed 7.1.1. Every requirement — stateless JWT filter,
+> method-level RBAC, custom entry point and access-denied handler — is implemented
+> with the same API shape you would use on Security 6.
+
+---
+
+## Prerequisites
+
+* JDK 21 (`java -version` should report 21)
+* Maven 3.9+ (or use the `mvnw` wrapper if you add one)
+* PostgreSQL 14+ **or** MySQL 8+
+* `curl` and `psql` / `mysql` clients for the examples below
+
+---
+
+## Environment variables
+
+Every secret is read from the environment. `application.yml` uses `${VAR}`
+placeholders **with no default for any secret**, so a missing variable fails
+startup rather than falling back to something weak. Copy `.env.example` to `.env`
+and fill it in; `.env` is git-ignored and must never be committed.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DB_URL` | yes | — | JDBC URL, e.g. `jdbc:postgresql://localhost:5432/booking_db` |
+| `DB_USERNAME` | yes | — | Database user |
+| `DB_PASSWORD` | yes | — | Database password |
+| `JWT_SECRET` | yes | — | HMAC key for HS256. **Must be at least 32 bytes**; startup fails otherwise |
+| `JWT_ACCESS_EXPIRY_MINUTES` | no | `15` | Access-token lifetime in minutes |
+| `JWT_REFRESH_EXPIRY_DAYS` | no | `7` | Refresh-token lifetime in days |
+| `SPRING_PROFILES_ACTIVE` | no | — | Set to `mysql` to run against MySQL |
+| `SERVER_PORT` | no | `8080` | HTTP port |
+| `DB_POOL_SIZE` | no | `10` | Hikari maximum pool size |
+| `DDL_AUTO` | no | `validate` | Hibernate schema handling; the schema itself comes from `db/<engine>/02_schema.sql` |
+
+Generate a secret with:
+
+```bash
+openssl rand -base64 48
+```
+
+---
+
+## Database setup
+
+Full step-by-step instructions, including verification commands, live in
+[`db/README.md`](db/README.md). The short version:
+
+### PostgreSQL (default)
+
+```bash
+# 1. role + database (as superuser)
+psql -U postgres -h localhost -f db/postgresql/01_create_database.sql
+# 2. schema
+psql -U booking_app -h localhost -d booking_db -f db/postgresql/02_schema.sql
+# 3. verify
+psql -U booking_app -h localhost -d booking_db -c '\dt'
+```
+
+```bash
+export DB_URL=jdbc:postgresql://localhost:5432/booking_db
+export DB_USERNAME=booking_app
+export DB_PASSWORD=<your password>
+```
+
+### MySQL
+
+Switching engines is **configuration only** — no code change, no rebuild.
+
+```bash
+# 1. user + database (as root)
+mysql -u root -p < db/mysql/01_create_database.sql
+# 2. schema
+mysql -u booking_app -p booking_db < db/mysql/02_schema.sql
+# 3. verify
+mysql -u booking_app -p -e 'SHOW TABLES;' booking_db
+```
+
+```bash
+export SPRING_PROFILES_ACTIVE=mysql
+export DB_URL='jdbc:mysql://localhost:3306/booking_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true'
+export DB_USERNAME=booking_app
+export DB_PASSWORD=<your password>
+```
+
+Both drivers ship with the application; the JDBC URL selects the dialect.
+
+### Schema
+
+| Table | Purpose |
+|---|---|
+| `users` | Accounts: `username` (unique), BCrypt `password`, `role` |
+| `resources` | Bookable resources with `type`, `active` and audit columns |
+| `reservations` | `resource_id`, `user_id`, period, `status`, `price DECIMAL(10,2)` |
+| `refresh_tokens` | SHA-256 **hash** of the opaque token, expiry, revoked flag |
+| `audit_logs` | actor, action, entity, timestamp, correlation id |
+
+---
+
+## Build and run
+
+```bash
+# build and run the full test suite
+mvn clean verify
+
+# run against the configured database
+mvn spring-boot:run
+
+# or run the packaged jar
+java -jar target/resource-booking-system-1.0.0.jar
+```
+
+With a `.env` file:
+
+```bash
+set -a && source .env && set +a && mvn spring-boot:run
+```
+
+The application starts on <http://localhost:8080>.
+
+---
+
+## Seed users (test only)
+
+On first start the seeder creates two accounts and three sample resources if they
+are absent. **These are development credentials, documented for testing only —
+change or remove them before any real deployment.**
+
+| Username | Password | Role |
+|---|---|---|
+| `admin` | `Admin@123` | `ADMIN` |
+| `user` | `User@123` | `USER` |
+
+Sample resources: *Meeting Room Alpha* (`ROOM`), *Company Van* (`VEHICLE`),
+*4K Projector* (`EQUIPMENT`).
+
+---
+
+## Swagger / OpenAPI
+
+| What | URL |
+|---|---|
+| Swagger UI | <http://localhost:8080/swagger-ui.html> |
+| OpenAPI JSON | <http://localhost:8080/v3/api-docs> |
+
+Click **Authorize** and paste an access token; Swagger sends it as
+`Authorization: Bearer <token>`.
+
+---
+
+## Token flow with curl
+
+### 1. Login
+
+```bash
+curl -s -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"user","password":"User@123"}'
+```
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "n0Yy3...opaque...",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+The access token is a 15-minute HS256 JWT carrying `sub`, `userId`, `role` and
+`jti`. The refresh token is an opaque random value; only its SHA-256 hash is
+stored server-side.
+
+```bash
+ACCESS=$(curl -s -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"user","password":"User@123"}' | jq -r .accessToken)
+REFRESH=$(curl -s -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"user","password":"User@123"}' | jq -r .refreshToken)
+```
+
+### 2. Call an endpoint
+
+```bash
+curl -s http://localhost:8080/api/resources -H "Authorization: Bearer $ACCESS"
+
+curl -s -X POST http://localhost:8080/api/reservations \
+  -H "Authorization: Bearer $ACCESS" \
+  -H 'Content-Type: application/json' \
+  -d '{"resourceId":1,"startTime":"2030-01-01T09:00:00","endTime":"2030-01-01T10:00:00","price":100.50}'
+```
+
+The reservation owner always comes from the token. A `userId` in the body is
+ignored, so a `USER` cannot create a booking on somebody else's behalf.
+
+### 3. Refresh (rotating)
+
+```bash
+curl -s -X POST http://localhost:8080/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d "{\"refreshToken\":\"$REFRESH\"}"
+```
+
+Every refresh returns a **new pair** and revokes the token you presented. Replaying
+an old, expired or unknown refresh token returns `401`.
+
+### 4. Logout
+
+```bash
+curl -s -X POST http://localhost:8080/auth/logout -H "Authorization: Bearer $ACCESS" -i
+```
+
+Returns `204`. All refresh tokens of the caller are revoked and the current
+access token's `jti` is blacklisted until it would have expired, so both tokens
+return `401` afterwards.
+
+---
+
+## API reference
+
+### Authentication
+
+| Method | Path | Access | Description |
+|---|---|---|---|
+| `POST` | `/auth/login` | public | Username + password → token pair |
+| `POST` | `/auth/refresh` | public | Rotate a refresh token |
+| `POST` | `/auth/logout` | authenticated | Revoke refresh tokens, blacklist the access token |
+
+### Resources
+
+| Method | Path | Access |
+|---|---|---|
+| `GET` | `/api/resources` | `ADMIN`, `USER` |
+| `GET` | `/api/resources/{id}` | `ADMIN`, `USER` |
+| `POST` | `/api/resources` | `ADMIN` |
+| `PUT` | `/api/resources/{id}` | `ADMIN` |
+| `DELETE` | `/api/resources/{id}` | `ADMIN` |
+
+### Reservations
+
+| Method | Path | Access |
+|---|---|---|
+| `POST` | `/api/reservations` | `ADMIN`, `USER` (owner taken from the token) |
+| `GET` | `/api/reservations` | `ADMIN` sees all, `USER` sees only their own |
+| `GET` | `/api/reservations/{id}` | `ADMIN` any, `USER` only their own |
+| `PUT` | `/api/reservations/{id}` | `ADMIN` |
+| `DELETE` | `/api/reservations/{id}` | `ADMIN` |
+
+A `USER` requesting another user's reservation gets **404**, never 403 — the API
+does not confirm that the row exists.
+
+#### Query parameters of `GET /api/reservations`
+
+| Parameter | Rules |
+|---|---|
+| `status` | `PENDING`, `CONFIRMED` or `CANCELLED` |
+| `minPrice`, `maxPrice` | ≥ 0, at most 2 decimals, `minPrice <= maxPrice` |
+| `page` | ≥ 0 (default `0`) |
+| `size` | 1–100 (default `20`) |
+| `sort` | `property,direction`; default `id,desc` |
+
+Sorting is whitelisted to `id`, `startTime`, `endTime`, `price`, `status` and
+`createdAt`; anything else is a `400`. Filtering is implemented with JPA
+Specifications.
+
+```bash
+curl -s "http://localhost:8080/api/reservations?status=CONFIRMED&minPrice=50&maxPrice=300&page=0&size=20&sort=price,asc" \
+  -H "Authorization: Bearer $ACCESS"
+```
+
+```json
+{
+  "content": [ ... ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 3,
+  "totalPages": 1,
+  "first": true,
+  "last": true,
+  "sort": "price: ASC"
+}
+```
+
+---
+
+## Error shape
+
+Every failure — from a servlet filter, from Spring Security or from a controller —
+uses the same body:
+
+```json
+{
+  "timestamp": "2026-09-18T07:41:42.136142271Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Validation failed",
+  "path": "/api/reservations",
+  "correlationId": "7b0333b0-9f80-4fb3-8832-604001940700",
+  "fieldErrors": [
+    { "field": "endTime", "message": "endTime must be after startTime" },
+    { "field": "price", "message": "price must be zero or greater" }
+  ]
+}
+```
+
+| Code | When |
+|---|---|
+| `400` | Validation failure, bad enum, bad paging or sorting |
+| `401` | Missing, expired, malformed, wrongly signed or blacklisted token; bad credentials; dead refresh token |
+| `403` | Authenticated but the role is insufficient |
+| `404` | Unknown entity, or a reservation the caller may not see |
+| `409` | Duplicate resource name, inactive resource, overlapping booking |
+
+`401` and `403` are JSON too, produced by a custom `AuthenticationEntryPoint` and
+`AccessDeniedHandler`.
+
+---
+
+## Health endpoints
+
+Only `health` and `info` are exposed; everything else returns `404`.
+
+| Endpoint | Purpose |
+|---|---|
+| `/actuator/health` | Overall status |
+| `/actuator/health/liveness` | Liveness probe |
+| `/actuator/health/readiness` | Readiness probe — **includes the database check** |
+| `/actuator/info` | Build/application info |
+
+All four are public, so orchestrators can probe them without a token. Details are
+`when-authorized` and limited to `ADMIN`:
+
+```bash
+curl -s http://localhost:8080/actuator/health
+# {"groups":["liveness","readiness"],"status":"UP"}
+
+curl -s http://localhost:8080/actuator/health -H "Authorization: Bearer $ADMIN_TOKEN"
+# {"components":{"db":{"details":{"database":"PostgreSQL",...},"status":"UP"}, ...}
+```
+
+---
+
+## Logging and the correlation ID
+
+Logs are structured JSON on stdout in **Elastic Common Schema**, via Spring Boot's
+built-in structured logging (`logging.structured.format.console=ecs`):
+
+```json
+{"@timestamp":"2026-09-18T07:41:59.455Z","log":{"level":"INFO","logger":"com.exelynt.booking.common.logging.RequestLoggingFilter"},
+ "message":"http_request method=GET path=/api/reservations status=200 durationMs=12",
+ "correlationId":"a77bed76-...","username":"user","ecs":{"version":"8.11"}}
+```
+
+* `CorrelationIdFilter` runs **first**: it reads `X-Correlation-Id` or generates a
+  UUID, puts it in the MDC, echoes it in the response header and clears the MDC
+  afterwards. A client-supplied value is accepted only if it is short and
+  alphanumeric (`-`, `_`, `.`), otherwise a fresh UUID is used — a header from the
+  outside never lands verbatim in a log line.
+* The authenticated `username` is added to the MDC once the JWT filter has
+  established the identity.
+* Each request is logged exactly once with method, path, status and duration.
+* Passwords, tokens, the `Authorization` header and secrets are **never** logged.
+  `LoginRequest`, `RefreshRequest`, `TokenResponse` and `User` override
+  `toString()` so they cannot leak by accident.
+
+```bash
+curl -s -D - -o /dev/null http://localhost:8080/actuator/health -H 'X-Correlation-Id: my-trace-123'
+# X-Correlation-Id: my-trace-123
+```
+
+The same id appears in the error body of a failed request, which is what ties a
+user-visible failure to its log lines.
+
+---
+
+## Audit trail
+
+Two complementary mechanisms:
+
+* **JPA auditing** on `Resource` and `Reservation` fills `createdAt`,
+  `updatedAt`, `createdBy` and `updatedBy`; the `AuditorAware` reads the username
+  from the security context (`system` during startup seeding).
+* **`audit_logs` rows** are written for login success, login failure, logout,
+  token refresh (and refresh failure), and every create / update / delete /
+  status change on resources and reservations. Each row records the actor, the
+  action, the entity, the timestamp and the correlation id of the request.
+
+---
+
+## Tests
+
+```bash
+mvn test
+```
+
+73 tests, all green:
+
+* **Unit** — `JwtService` (claims, expiry, wrong signature, wrong issuer,
+  malformed), `JwtProperties` fail-fast rules, the token blacklist, the sort
+  whitelist, and the auth / resource / reservation services with Mockito.
+* **Integration (MockMvc)** — login success and failure; expired, malformed and
+  wrongly signed tokens return 401; `USER` gets 403 on admin endpoints; `USER`
+  cannot read another user's reservation (404); a `userId` in the request body is
+  ignored; filtering, paging and sorting; refresh rotation; access and refresh
+  after logout return 401; the correlation ID header is echoed back; health
+  endpoint exposure and detail visibility.
+
+Tests run under the `test` profile against in-memory H2 with their own throwaway
+JWT secret (`src/test/resources/application-test.yml`) — no environment variables
+and no real credentials are involved.
+
+---
+
+## Project layout
+
+```
+src/main/java/com/exelynt/booking
+├── BookingApplication.java
+├── auth/          login, refresh rotation, logout, refresh-token entity
+├── audit/         AuditLog entity, repository, AuditService
+├── common/
+│   ├── exception/ error shape + @RestControllerAdvice
+│   ├── logging/   correlation-id filter, request log filter, MDC helpers
+│   ├── model/     Auditable mapped superclass, PageResponse
+│   ├── validation/ @ValidPeriod, @ValidPriceRange
+│   └── web/       JSON error writer, sort whitelist
+├── config/        JPA auditing, OpenAPI, data seeder
+├── reservation/   entity, repository, specifications, service, controller, DTOs
+├── resource/      entity, repository, service, controller, DTOs
+├── security/      JWT service, filter, blacklist, principal, security config
+└── user/          User entity, repository, service
+```
+
+Layering is strict: **controller → service → repository**. DTOs are the only
+types crossing the API boundary; entities never are. All injection is
+constructor-based.
+
+---
+
+## Security notes
+
+* Passwords are hashed with BCrypt; the raw value is never stored, logged or returned.
+* Refresh tokens are 64 bytes of `SecureRandom` output; only the SHA-256 hash is
+  persisted, so a database dump cannot be replayed against the API.
+* Refresh tokens rotate on every use — replaying one is a 401.
+* Logout revokes refresh tokens and blacklists the access token's `jti` until its
+  natural expiry. The blacklist sits behind a `TokenBlacklist` interface, so the
+  in-memory implementation can be swapped for Redis without touching the filter.
+* Login failures return the same message for an unknown user and a wrong
+  password, so accounts cannot be enumerated.
+* Sessions are disabled entirely (`SessionCreationPolicy.STATELESS`); CSRF is off
+  because there is no cookie-based authentication to protect.
+* `sort` is whitelisted, so the parameter cannot be used to probe arbitrary columns.
+* The seeded credentials above exist for local testing only.
