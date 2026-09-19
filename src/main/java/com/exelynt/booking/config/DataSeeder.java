@@ -10,6 +10,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -18,11 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Creates the two demo accounts and three sample resources on first start.
  *
- * <p>The passwords below are development seeds documented in the README; they
- * are the only credentials in the code base and are meant to be changed before
- * any deployment that matters.</p>
+ * <p>Off unless {@code app.seed.enabled} is true. The passwords below are
+ * published in the README, so an environment that seeded them silently would be
+ * shipping a known ADMIN login — the flag has to be turned on deliberately, and
+ * doing so logs a warning naming the accounts.</p>
  */
 @Component
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true")
 public class DataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
@@ -47,6 +50,9 @@ public class DataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        log.warn("data_seeding_enabled - creating the documented '{}' and '{}' accounts; "
+                + "app.seed.enabled must stay false anywhere that matters",
+                ADMIN_USERNAME, USER_USERNAME);
         seedUser(ADMIN_USERNAME, ADMIN_SEED_PASSWORD, Role.ADMIN);
         seedUser(USER_USERNAME, USER_SEED_PASSWORD, Role.USER);
         seedResources();

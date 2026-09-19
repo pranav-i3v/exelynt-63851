@@ -16,6 +16,9 @@ spring:
     open-in-view: false
 
 app:
+  seed:
+    # The suite logs in as the documented accounts, so the seeder runs here.
+    enabled: true
   jwt:
     access-expiry-minutes: 15
     refresh-expiry-days: 7

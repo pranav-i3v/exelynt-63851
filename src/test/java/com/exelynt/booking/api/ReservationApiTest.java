@@ -68,6 +68,74 @@ class ReservationApiTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("a USER cannot confirm their own booking: CONFIRMED in the body becomes PENDING")
+    void userCannotSelfConfirm() throws Exception {
+        mockMvc.perform(post("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"resourceId":1,"startTime":"2037-01-01T09:00:00",
+                                 "endTime":"2037-01-01T10:00:00","price":10.00,"status":"CONFIRMED"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    @DisplayName("an ADMIN may create a booking already confirmed")
+    void adminMayConfirmOnCreate() throws Exception {
+        mockMvc.perform(post("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"resourceId":1,"startTime":"2037-02-01T09:00:00",
+                                 "endTime":"2037-02-01T10:00:00","price":10.00,"status":"CONFIRMED"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+    }
+
+    @Test
+    @DisplayName("a reservation cannot be moved onto a deactivated resource")
+    void updateRejectsInactiveResource() throws Exception {
+        int id = createReservation(userAccessToken, 1, "2038-01-01T09:00:00", "2038-01-01T10:00:00", "10.00");
+        // Take resource 2 out of service, then try to move the booking onto it.
+        mockMvc.perform(put("/api/resources/2")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Company Van\",\"type\":\"VEHICLE\",\"active\":false}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/reservations/" + id)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"resourceId":2,"startTime":"2038-01-01T09:00:00",
+                                 "endTime":"2038-01-01T10:00:00","status":"CONFIRMED","price":10.00}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("not active")));
+    }
+
+    @Test
+    @DisplayName("an update does not clash with the reservation being updated")
+    void updateDoesNotClashWithItself() throws Exception {
+        int id = createReservation(adminAccessToken, 3, "2039-01-01T09:00:00", "2039-01-01T11:00:00", "10.00");
+
+        // Same window, same reservation: the excluded-id path must not see a clash.
+        mockMvc.perform(put("/api/reservations/" + id)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"resourceId":3,"startTime":"2039-01-01T09:00:00",
+                                 "endTime":"2039-01-01T11:00:00","status":"CONFIRMED","price":25.00}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.price").value(25.00));
+    }
+
+    @Test
     @DisplayName("a USER cannot read somebody else's reservation and gets 404, not 403")
     void userCannotReadForeignReservation() throws Exception {
         String adminReservation = mockMvc.perform(post("/api/reservations")

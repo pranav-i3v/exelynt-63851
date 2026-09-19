@@ -85,6 +85,7 @@ and fill it in; `.env` is git-ignored and must never be committed.
 | `REDIS_USERNAME` / `REDIS_PASSWORD` | when Redis needs auth | — | Redis credentials |
 | `REDIS_SSL` | no | `false` | TLS to Redis |
 | `REFRESH_TOKEN_PURGE_CRON` | no | `0 15 * * * *` | When to sweep expired refresh tokens |
+| `SEED_DATA` | no | `false` | Creates the demo accounts below. Their passwords are public — leave it off anywhere real |
 | `SERVER_PORT` | no | `8080` | HTTP port |
 | `DB_POOL_SIZE` | no | `10` | Hikari maximum pool size |
 | `DDL_AUTO` | no | `validate` | Hibernate schema handling; the schema itself comes from `db/postgresql/02_schema.sql` |
@@ -404,7 +405,7 @@ return `401` afterwards.
 
 | Method | Path | Access |
 |---|---|---|
-| `POST` | `/api/reservations` | `ADMIN`, `USER` (owner taken from the token) |
+| `POST` | `/api/reservations` | `ADMIN`, `USER` (owner taken from the token; `status` honoured only for an ADMIN) |
 | `GET` | `/api/reservations` | `ADMIN` sees all, `USER` sees only their own |
 | `GET` | `/api/reservations/{id}` | `ADMIN` any, `USER` only their own |
 | `PUT` | `/api/reservations/{id}` | `ADMIN` |
@@ -412,6 +413,17 @@ return `401` afterwards.
 
 A `USER` requesting another user's reservation gets **404**, never 403 — the API
 does not confirm that the row exists.
+
+**A USER cannot approve their own booking.** `status` in the create body is
+honoured only for an ADMIN; anything a USER sends is overridden with `PENDING`.
+The request still succeeds — the booking is created, just not pre-approved by
+the person who asked for it. Changing a status afterwards is `PUT`, which is
+ADMIN-only.
+
+**A PENDING booking holds the slot.** Overlap is rejected against everything
+except `CANCELLED`, so two pending requests for the same window clash. The
+alternative — letting pending bookings pile up on one slot — only defers the
+conflict to whoever approves them.
 
 #### Query parameters of `GET /api/reservations`
 
@@ -639,7 +651,7 @@ Two complementary mechanisms:
 mvn test
 ```
 
-119 tests, all green:
+123 tests, all green:
 
 * **Unit** — refresh-token replay detection and the cases it must *not* fire on
   (expired, expired-and-revoked, unknown), `JpaRefreshTokenStore` (only a hash
@@ -658,7 +670,9 @@ mvn test
   ignored; filtering, paging and sorting; refresh rotation; access and refresh
   after logout return 401; replaying a rotated refresh token ends every session
   of that user and is indistinguishable from an unknown token; the correlation
-  ID header is echoed back; Redis is the only blacklist backend, and an outage
+  ID header is echoed back; a USER cannot self-confirm a booking while an ADMIN
+  can; an update cannot move a reservation onto a deactivated resource, and does
+  not clash with itself; Redis is the only blacklist backend, and an outage
   gives 503 on requests and on logout rather than admitting the token; health
   endpoint exposure and detail visibility.
 
@@ -733,5 +747,13 @@ constructor-based.
   password, so accounts cannot be enumerated.
 * Sessions are disabled entirely (`SessionCreationPolicy.STATELESS`); CSRF is off
   because there is no cookie-based authentication to protect.
+* CORS is disabled, which assumes callers are same-origin or non-browser. A
+  browser SPA on another origin needs a `CorsConfigurationSource` bean with an
+  explicit origin allow-list — deliberately not added, since allowing everything
+  by default is how an API ends up callable from any page on the internet.
+* The principal is re-read from the database on each request rather than trusted
+  from the token claims, so a role change or a disabled account takes effect
+  immediately instead of lingering for the rest of the token's 15 minutes.
 * `sort` is whitelisted, so the parameter cannot be used to probe arbitrary columns.
-* The seeded credentials above exist for local testing only.
+* The seeded credentials above exist for local testing only, and are not created
+  unless `SEED_DATA=true`.

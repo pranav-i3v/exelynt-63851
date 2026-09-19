@@ -92,7 +92,7 @@ class ReservationServiceTest {
         authenticateAs(alice, Role.USER);
         when(resourceService.getEntityOrThrow(3L)).thenReturn(room);
         when(userService.getById(7L)).thenReturn(alice);
-        when(reservationRepository.countOverlapping(any(), any(), any(), any())).thenReturn(0L);
+        when(reservationRepository.countOverlapping(any(), any(), any(), any(), any())).thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> {
             Reservation reservation = invocation.getArgument(0);
             ReflectionTestUtils.setField(reservation, "id", 1L);
@@ -117,7 +117,7 @@ class ReservationServiceTest {
         authenticateAs(alice, Role.USER);
         when(resourceService.getEntityOrThrow(3L)).thenReturn(room);
         when(userService.getById(7L)).thenReturn(alice);
-        when(reservationRepository.countOverlapping(3L, START, END, ReservationStatus.CANCELLED)).thenReturn(1L);
+        when(reservationRepository.countOverlapping(3L, START, END, ReservationStatus.CANCELLED, null)).thenReturn(1L);
 
         assertThatThrownBy(() -> reservationService.create(
                 new ReservationCreateRequest(3L, START, END, new BigDecimal("10.00"), null)))

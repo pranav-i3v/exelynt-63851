@@ -103,6 +103,11 @@ public class AuthService {
                     ENTITY_TYPE, token.userId());
             log.warn("refresh_token_reuse_detected username={} revokedTokens={} - "
                     + "all sessions for this user have been ended", token.username(), revoked);
+            // The revocation above and this 401 are deliberately in different
+            // transactions: revokeAllForUser runs REQUIRES_NEW, and the audit row
+            // likewise, so both survive the rollback this throw causes. Joining
+            // them to the caller's transaction would undo the revocation - which
+            // is exactly the "tidy-up" to resist here.
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
         }
         if (!token.isUsable()) {

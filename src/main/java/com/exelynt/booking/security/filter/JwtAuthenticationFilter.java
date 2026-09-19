@@ -27,6 +27,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Authenticates requests carrying {@code Authorization: Bearer <jwt>}.
  *
+ * <p>The principal is re-read from the database on every request rather than
+ * trusted from the token's claims. That is deliberate: a role change or a
+ * disabled account takes effect at once instead of lingering for the rest of
+ * the token's 15 minutes. The cost is one indexed lookup per request; if that
+ * ever shows up in a profile, cache the principal for a few seconds rather than
+ * trusting the claims outright.</p>
+ *
  * <p>Expired, malformed, wrongly signed and blacklisted tokens are all rejected
  * with a JSON 401 built from the standard error shape. Requests without the
  * header pass through untouched: the entry point decides whether the endpoint

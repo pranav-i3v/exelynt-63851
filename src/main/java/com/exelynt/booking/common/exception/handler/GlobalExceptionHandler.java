@@ -104,7 +104,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
                                                               HttpServletRequest request) {
-        log.debug("Unreadable request body on {}", request.getRequestURI());
+        // The body itself is never logged - it may carry a password - but the
+        // parser's own message names the offending field, which is what makes a
+        // misspelled property traceable.
+        log.debug("Unreadable request body on {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage(), ex);
         return build(HttpStatus.BAD_REQUEST, "Malformed or unreadable request body", request, List.of());
     }
 

@@ -51,8 +51,13 @@ public final class ReservationSpecifications {
             specifications.add(priceAtMost(maxPrice));
         }
         if (specifications.isEmpty()) {
+            // An ADMIN with no filters matches everything. allOf over an empty list
+            // is not a documented always-true, so say so explicitly instead.
             return (root, query, builder) -> builder.conjunction();
         }
+        // Specification.allOf (Spring Data JPA 3.1+) ANDs the parts together; each
+        // predicate above ignores the parameters it does not need, which is why
+        // some lambdas leave query and builder unused.
         return Specification.allOf(specifications);
     }
 }

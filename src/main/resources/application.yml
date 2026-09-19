@@ -75,6 +75,12 @@ app:
       # 0 disables re-reading; set it to pick up a rotated key without a restart.
       refresh-minutes: ${JWT_KEY_REFRESH_MINUTES:0}
 
+  seed:
+    # Off by default: turning it on creates the 'admin' and 'user' accounts whose
+    # passwords are published in the README. Local development and tests set it
+    # true; nothing else should.
+    enabled: ${SEED_DATA:false}
+
   auth:
     # Hourly sweep of expired refresh tokens. Revoked-but-unexpired tokens are
     # deliberately kept until they expire: they are what makes a replayed token

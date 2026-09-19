@@ -15,6 +15,12 @@ import java.time.LocalDateTime;
  * <p>There is deliberately no {@code userId} field: the owner is always the
  * authenticated caller. A {@code userId} sent by a client is simply not bound
  * and therefore ignored.</p>
+ *
+ * <p><strong>{@code status} is only honoured for an ADMIN.</strong> A booking
+ * created by a USER is always PENDING, whatever the body asks for — approving
+ * your own request is not something the requester gets to do. The service
+ * enforces this; do not move the decision into {@link #statusOrDefault()},
+ * which knows nothing about who is calling.</p>
  */
 @ValidPeriod
 public record ReservationCreateRequest(
@@ -34,7 +40,10 @@ public record ReservationCreateRequest(
 
         ReservationStatus status) implements PeriodValidatable {
 
-    /** New reservations start as PENDING unless an explicit valid status is supplied. */
+    /**
+     * The requested status, defaulting to PENDING. Only meaningful for an ADMIN:
+     * the service overrides it with PENDING for everybody else.
+     */
     public ReservationStatus statusOrDefault() {
         return status == null ? ReservationStatus.PENDING : status;
     }
